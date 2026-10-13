@@ -9,8 +9,8 @@
 // This file also checks whether the player has crossed the finish line.
 
 import * as THREE from 'three';
-import { LAKE, COURSE, BOBBER, COLORS } from './config.js';
-import { getWaveHeight, lakeCenterX, getLakeEdges } from './world.js';
+import { COURSE, PORTAL, BOBBER, COLORS } from './config.js';
+import { getWaveHeight, lakeCenterX, getLakeEdges, getLevel, isOverLake } from './world.js';
 
 // Draws a number on a hidden canvas and turns it into a texture for the flags.
 // It uses the computer's built-in font, so no font files are needed.
@@ -105,9 +105,11 @@ export function createCheckpoints(scene) {
   // Puts every gate at a random spot and angle, staying inside the lake.
   function placeGates() {
     for (const g of gates) {
-      // Evenly spaced along the lake (1/5, 2/5, 3/5, 4/5 of the way for 4 gates),
-      // then nudged forward/back, shifted sideways and turned a little.
-      const baseZ = -LAKE.length * ((g.index + 1) / (count + 1));
+      // Where the level says (space lakes put one gate on each island), or evenly spaced
+      // (1/5, 2/5, 3/5, 4/5 of the way for 4 gates). Then nudged forward/back, shifted
+      // sideways and turned a little.
+      const level = getLevel();
+      const baseZ = level.checkpointZ ? level.checkpointZ[g.index] : level.finishZ * ((g.index + 1) / (count + 1));
       let placed = false;
       for (let tries = 0; tries < 30 && !placed; tries++) {
         const z = baseZ + THREE.MathUtils.randFloatSpread(COURSE.gateZJitter * 2);
@@ -133,13 +135,14 @@ export function createCheckpoints(scene) {
     };
   }
 
-  // Are both buoys comfortably inside the water?
+  // Are both buoys comfortably inside the water (and not near the end of a lake)?
   function gateFits(x, z, angle) {
     const { across } = directions(angle);
     const margin = COURSE.buoyRadius + 3;
     for (const side of [-1, 1]) {
       const bx = x + across.x * half * side;
       const bz = z + across.z * half * side;
+      if (!isOverLake(bz, 10)) return false;
       const edges = getLakeEdges(bz);
       if (bx < edges.minX + margin || bx > edges.maxX - margin) return false;
     }
@@ -223,10 +226,11 @@ export function createCheckpoints(scene) {
       }
     }
 
-    // The finish line is straight across, so a simple Z check works here.
-    const fz = COURSE.finishZ;
+    // The finish portal faces straight down the lake, so a simple Z check works here:
+    // did we cross its Z this frame, close enough to its middle to be inside the ring?
+    const fz = getLevel().finishZ;
     const crossedFinish = prev.z > fz && now.z <= fz;
-    if (crossedFinish && Math.abs(now.x - lakeCenterX(fz)) <= COURSE.finishWidth / 2) {
+    if (crossedFinish && Math.abs(now.x - lakeCenterX(fz)) <= PORTAL.radius) {
       if (nextGate === gates.length) return { finished: true };
       gates[nextGate].missed = true;
       return { missedCheckpoints: nextGate + 1 };

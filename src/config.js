@@ -5,14 +5,12 @@
 // Coordinate system used everywhere:
 //   X = left / right across the lake
 //   Y = up / down
-//   Z = along the lake. The start line is at Z = 0 and the finish is at
-//       Z = -LAKE.length (the course runs toward negative Z, "into the screen").
+//   Z = along the lake. The start line is at Z = 0 and each level's finish portal is at
+//       its finishZ (about -400). The course runs toward negative Z, "into the screen".
 
 export const LAKE = {
-  length: 400,        // distance from start line to finish
+  // (Where each lake starts and ends is set per level, in LEVELS below.)
   width: 80,          // average distance from left shore to right shore
-  extraBehindStart: 40, // water behind the start line (under the dock)
-  extraPastFinish: 30,  // water past the finish before the far shore
   // Shape of the shoreline (makes the lake curvy instead of a straight "road")
   widthWiggle: 12,    // how much the lake gets wider and narrower along its length
   bendAmount: 12,     // how far the lake curves left and right
@@ -42,6 +40,8 @@ export const SHORE = {
   treeCount: 110,
   rockCount: 40,
   reedCount: 90,     // clumps of cattails along the water's edge
+  islandRim: 10,     // space islands: width of the grassy rim around the beach
+  crystalCount: 40,  // space islands: glowing crystals on the rims (across all islands)
 };
 
 export const BOBBER = {
@@ -73,10 +73,13 @@ export const FLY = {
 
 export const SHOOT = {
   speed: 45,           // how fast zaps fly (units per second)
-  life: 1.1,           // seconds before a zap fizzles out
+  life: 1.8,           // seconds before a zap fizzles out (1.8 s × 45 speed = about 80 units)
   cooldown: 0.25,      // seconds between shots while holding the button
-  maxAmmo: 6,          // zaps you can carry
+  maxAmmo: 6,          // the automatic reload fills you up to this many zaps
   reloadTime: 2.5,     // seconds to get one zap back
+  maxCarry: 12,        // with Zap Packs and checkpoints you can carry up to this many
+  packAmount: 3,       // zaps in a Zap Pack pickup
+  checkpointBonus: 2,  // zaps earned for passing a checkpoint
   radius: 0.35,        // size of a zap (for hitting things)
   aimAhead: 15,        // without a mouse target, aim at the water this far ahead
 };
@@ -88,10 +91,96 @@ export const COURSE = {
   gateShiftMax: 20,    // gates are moved up to this far left or right of the lake's middle
   gateAngleMax: 0.6,   // and turned up to this much (radians; 0.6 is about 35 degrees)
   gateZJitter: 10,     // and nudged up to this far forward or back
-  finishZ: -LAKE.length,
-  finishWidth: 40,     // distance between the two finish posts
-  finishHeight: 9,     // how tall the finish arch is
   startFlagX: -6,      // where the little flag on the start line stands
+};
+
+// The swirling portal at the end of every level
+export const PORTAL = {
+  radius: 9,           // size of the ring
+  tube: 0.9,           // thickness of the ring
+  centerHeight: 6,     // how high the middle of the ring is above the water
+  spinSpeed: 1.6,      // how fast the swirl spins
+};
+
+// ---------------------------------------------------------------------------
+// Levels ("scenes"). Finish one and its portal takes you to the next.
+// Each level is made of one or more lakes, listed from the start (near) to the finish (far).
+//   start / end   – where the lake begins and ends along Z
+//   checkpointZ   – where the 4 gates go (null = spread evenly)
+//   bend / widthWiggle – how curvy the lake is
+// Gaps between lakes have no water: you have to FLY across. Fall in and you lose a life!
+// ---------------------------------------------------------------------------
+export const LEVELS = [
+  {
+    name: 'Home Lake',
+    theme: 'lake',
+    lakes: [{ start: 40, end: -430 }],
+    checkpointZ: null,
+    finishZ: -400,
+    bend: 12,
+    widthWiggle: 12,
+  },
+  {
+    name: 'Space Lakes',
+    theme: 'space',
+    lakes: [
+      { start: 25, end: -95 },
+      { start: -122, end: -205 },
+      { start: -232, end: -315 },
+      { start: -342, end: -435 },
+    ],
+    checkpointZ: [-55, -163, -273, -370],
+    finishZ: -405,
+    bend: 6,
+    widthWiggle: 8,
+  },
+];
+
+// How each kind of level looks. Lake = sunny day on Earth, space = floating islands
+// among the stars.
+export const THEMES = {
+  lake: {
+    sky: 0x9fd4f0,
+    fog: 0x9fd4f0,
+    fogNear: 60,
+    fogFar: 300,
+    sun: 0xfff1d6,
+    sunIntensity: 2.2,
+    hemiSky: 0xcfeeff,
+    hemiGround: 0x4a7a3a,
+    hemiIntensity: 1.0,
+    water: 0x2f8f9d,
+    wetSand: 0xb9a676,
+    sand: 0xe6d3a3,
+    grass: 0x6dbb4f,
+    grassDark: 0x4f9a3a,
+    portal: 0xff7a1a,
+    portalGlow: 0xffd180,
+    wildlife: true,    // frogs and birds
+    islands: false,    // the lake sits in hills, not floating in space
+  },
+  space: {
+    sky: 0x05030f,
+    fog: 0x120a2a,
+    fogNear: 90,
+    fogFar: 360,
+    sun: 0xd6dcff,
+    sunIntensity: 1.9,
+    hemiSky: 0x9a8cff,
+    hemiGround: 0x1a1033,
+    hemiIntensity: 1.1,
+    water: 0x2a46a0,
+    wetSand: 0x4a3a6a,
+    sand: 0xa898d4,
+    grass: 0x5b3f9e,
+    grassDark: 0x3a2470,
+    rock: 0x3f3357,
+    crystals: [0x7df9ff, 0xff6bd6, 0xb388ff],
+    portal: 0xb388ff,
+    portalGlow: 0x7df9ff,
+    wildlife: false,
+    islands: true,     // each lake is a floating island with rock underneath
+  },
 };
 
 export const OBSTACLES = {
@@ -167,6 +256,7 @@ export const COINS = {
   airMinHeight: 4,
   airMaxHeight: 7,
   goldenChance: 1 / 15, // chance a spawn is a Golden Lure instead of a coin
+  zapPackChance: 1 / 8, // chance a spawn is a Zap Pack (+zaps) instead of a coin
   obstacleClearance: 3, // coins never appear this close to an obstacle
 };
 
@@ -267,23 +357,23 @@ export const CAMERA = {
 };
 
 export const SCENE = {
-  fogNear: 60,
-  fogFar: 300,
   cameraFov: 60,
+  portraitFov: 78,     // wider view when the screen is taller than it is wide (phone held upright)
   maxPixelRatio: 2,
   sunOffset: { x: 60, y: 120, z: 40 }, // sun position relative to the bobber
-  sunIntensity: 2.2,
-  hemiIntensity: 1.0,
   shadowMapSize: 2048,
+  // (Sky, fog and light colors are in THEMES, because each level looks different.)
+};
+
+// Phones and tablets: draw a bit less detail so the game stays smooth.
+export const MOBILE = {
+  maxPixelRatio: 1.5,
+  shadowMapSize: 1024,
+  waterCellSize: 4.5,  // bigger squares = fewer points to animate every frame
+  terrainCellSize: 3.5,
 };
 
 export const COLORS = {
-  sky: 0x9fd4f0,
-  water: 0x2f8f9d,
-  sand: 0xe6d3a3,
-  wetSand: 0xb9a676,
-  grass: 0x6dbb4f,
-  grassDark: 0x4f9a3a,
   wood: 0x8b5a2b,
   woodDark: 0x5e3a1a,
   trunk: 0x6b4423,
@@ -332,9 +422,7 @@ export const COLORS = {
   sparkle: 0xfff59d,
   wake: 0xffffff,
   zap: 0x7df9ff,
+  zapPack: 0x00e5ff,
   zapGlow: 0x00b8d4,
   confetti: [0xff7a1a, 0x43d36b, 0x42a5f5, 0xffeb3b, 0xe53935, 0xffffff],
-  sun: 0xfff1d6,
-  hemiSky: 0xcfeeff,
-  hemiGround: 0x4a7a3a,
 };

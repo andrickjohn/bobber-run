@@ -1,14 +1,16 @@
 // bobber.js
 // The player: a red-and-white fishing bobber.
 // It floats on the waves and glides toward wherever the mouse is pointing on the water.
+// On a touchscreen, drag a finger: the bobber glides toward it.
 // The arrow keys (or W/A/S/D) can steer it too.
 // Holding Space (or the mouse button) makes it FLY: it climbs to hover height and stays
 // there until you let go or run out of energy, then glides back down to the water.
+// Over a gap between space lakes there's no water to land on: it falls into space!
 
 import * as THREE from 'three';
 import { BOBBER, FLY, SHOOT, COLORS } from './config.js';
 import { getChaseCameraPose } from './scene.js';
-import { getWaveHeight, getLakeEdges, WATER_BOUNDS } from './world.js';
+import { getWaveHeight, getLakeEdges, getWaterBounds, isOverLake, getLakeAt } from './world.js';
 
 export function createBobber(scene, camera, canvas) {
   // ----- The 3D model -----
@@ -67,21 +69,39 @@ export function createBobber(scene, camera, canvas) {
   // Flying: height above the water, up/down speed, and energy (1 = full, 0 = empty).
   // mustLetGo: after running out of energy, you have to let go of Fly before flying again
   // (otherwise holding the button would make it hop up and down as energy trickles back).
-  const flight = { height: 0, vy: 0, energy: 1, flying: false, mustLetGo: false };
+  // falling: dropped below the lakes into a gap (no way back up, you lose a life).
+  const flight = { height: 0, vy: 0, energy: 1, flying: false, mustLetGo: false, falling: false };
   let speedSetting = BOBBER.speedSetting;
   let controlsEnabled = true; // turned off when the game is over or won
 
-  // ----- Mouse -----
-  // We store the mouse in "normalized device coordinates": -1 to +1 across the screen.
+  // ----- Mouse and finger -----
+  // We store the pointer in "normalized device coordinates": -1 to +1 across the screen.
+  // On a touchscreen, the finger that touches the game steers the same way the mouse
+  // does. Fingers pressing the Fly/Zap buttons are ignored here.
   const mouse = new THREE.Vector2();
-  let hasMouse = false; // don't move until the player has moved the mouse at least once
-  // Listen on the whole window (not just the canvas), so moving over the HUD still counts.
-  window.addEventListener('pointermove', (e) => {
+  let hasMouse = false; // don't move until the player has pointed somewhere at least once
+  let steeringFinger = null; // which finger is steering (each touch has its own id)
+
+  function pointAt(e) {
     const rect = canvas.getBoundingClientRect();
     mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
     hasMouse = true;
+  }
+  // Listen on the whole window (not just the canvas), so moving over the HUD still counts.
+  window.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse' && e.pointerId !== steeringFinger) return;
+    pointAt(e);
   });
+  // Letting go with the steering finger: stop steering and glide to a stop.
+  function fingerUp(e) {
+    if (e.pointerId === steeringFinger) {
+      steeringFinger = null;
+      hasMouse = false;
+    }
+  }
+  window.addEventListener('pointerup', fingerUp);
+  window.addEventListener('pointercancel', fingerUp);
   // If the mouse leaves the window, stop following it (otherwise the bobber would keep
   // heading for the last spot the mouse was seen, forever). It glides to a stop instead.
   document.addEventListener('mouseleave', () => (hasMouse = false));
@@ -93,7 +113,13 @@ export function createBobber(scene, camera, canvas) {
   let flyMouseDown = false;
   let flyButtonDown = false; // the on-screen Fly button (for touchscreens)
   canvas.addEventListener('pointerdown', (e) => {
-    if (e.pointerType === 'mouse' && e.button === 0) flyMouseDown = true;
+    if (e.pointerType === 'mouse') {
+      if (e.button === 0) flyMouseDown = true;
+    } else if (steeringFinger === null) {
+      // The first finger to touch the game becomes the steering finger.
+      steeringFinger = e.pointerId;
+      pointAt(e);
+    }
   });
   window.addEventListener('pointerup', (e) => {
     if (e.pointerType === 'mouse' && e.button === 0) flyMouseDown = false;
@@ -169,6 +195,7 @@ export function createBobber(scene, camera, canvas) {
   const idealLookAt = new THREE.Vector3();
   function screenDistance() {
     idealCamera.aspect = camera.aspect;
+    idealCamera.fov = camera.fov;
     idealCamera.updateProjectionMatrix();
     getChaseCameraPose(position, idealCamera.position, idealLookAt, flight.height);
     idealCamera.lookAt(idealLookAt);
@@ -188,6 +215,13 @@ export function createBobber(scene, camera, canvas) {
   // ----- Flying -----
   // Returns the landing speed on the frame the bobber touches down (for a splash), else 0.
   function updateFlight(dt) {
+    if (flight.falling) {
+      // Tumbling down into space: gravity only, faster and faster.
+      flight.flying = false;
+      flight.vy -= FLY.gravity * 2 * dt;
+      flight.height += flight.vy * dt;
+      return 0;
+    }
     const wantsToFly = controlsEnabled && (flyKeyDown || flyMouseDown || flyButtonDown);
     if (!wantsToFly) flight.mustLetGo = false;
     if (flight.energy <= 0) flight.mustLetGo = true;
@@ -207,13 +241,19 @@ export function createBobber(scene, camera, canvas) {
 
     flight.height += flight.vy * dt;
     let landingSpeed = 0;
+    const overLake = isOverLake(position.z);
     if (flight.height <= 0) {
+      if (!overLake) {
+        // No water down here, just empty space...
+        flight.falling = true;
+        return 0;
+      }
       if (flight.vy < 0 && flight.height < 0) landingSpeed = -flight.vy;
       flight.height = 0;
       flight.vy = 0;
     }
     // Recharge while floating on the water.
-    if (flight.height === 0 && !flight.flying) {
+    if (flight.height === 0 && !flight.flying && overLake) {
       flight.energy = Math.min(1, flight.energy + FLY.energyRecharge * dt);
     }
     return landingSpeed;
@@ -221,7 +261,8 @@ export function createBobber(scene, camera, canvas) {
 
   // ----- Called every frame -----
   // dt = seconds since the last frame, time = seconds since the game started.
-  // Returns { landed: speed } on the frame it splashes down from a flight, otherwise null.
+  // Returns { landed: speed } on the frame it splashes down from a flight,
+  // { fell: true } once it has fallen far down into space, otherwise null.
   function update(dt, time) {
     const landingSpeed = updateFlight(dt);
     const factor = speedFactor();
@@ -278,12 +319,13 @@ export function createBobber(scene, camera, canvas) {
     mesh.rotation.x = velocity.z * BOBBER.tiltAmount;
     mesh.rotation.z = -velocity.x * BOBBER.tiltAmount;
 
-    // The shadow spot: bigger and fainter the higher we are.
-    blob.visible = mesh.visible && flight.height > 0.3;
+    // The shadow spot: bigger and fainter the higher we are. (None over empty space.)
+    blob.visible = mesh.visible && flight.height > 0.3 && isOverLake(position.z);
     blob.position.set(position.x, wave + 0.05, position.z);
     blob.scale.setScalar(1 + flight.height * 0.08);
     blob.material.opacity = Math.max(0.08, 0.35 - flight.height * 0.03);
 
+    if (flight.falling && flight.height < -12) return { fell: true };
     return landingSpeed > FLY.landSplashSpeed ? { landed: landingSpeed } : null;
   }
 
@@ -301,8 +343,15 @@ export function createBobber(scene, camera, canvas) {
       if (velocity.x > 0) velocity.x = -velocity.x * BOBBER.bounce;
     }
 
-    const minZ = WATER_BOUNDS.minZ + r;
-    const maxZ = BOBBER.startZ + 2; // can't go back under the dock
+    let minZ = getWaterBounds().minZ + r;
+    let maxZ = BOBBER.startZ + 2; // can't go back under the dock
+    // Floating on the water, the ends of the lake are shore too: to cross a gap to the
+    // next lake you have to FLY.
+    const lake = getLakeAt(position.z);
+    if (lake && flight.height === 0 && !flight.falling) {
+      minZ = Math.max(minZ, lake.end + r);
+      maxZ = Math.min(maxZ, lake.start - r);
+    }
     if (position.z < minZ) {
       position.z = minZ;
       if (velocity.z < 0) velocity.z = -velocity.z * BOBBER.bounce;
@@ -321,6 +370,7 @@ export function createBobber(scene, camera, canvas) {
     flight.energy = 1;
     flight.flying = false;
     flight.mustLetGo = false;
+    flight.falling = false;
   }
 
   // Which way to shoot (a direction of length 1, written into "out").
@@ -370,6 +420,6 @@ export function createBobber(scene, camera, canvas) {
     update, reset, setSpeedSetting, setControlsEnabled, setVisible, setFlyButton, getAim,
     // Height above the water and whether it's floating (handy for other files).
     get height() { return flight.height; },
-    get onWater() { return flight.height < 0.05; },
+    get onWater() { return !flight.falling && flight.height < 0.05; },
   };
 }

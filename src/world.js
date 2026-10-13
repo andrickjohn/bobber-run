@@ -1,38 +1,71 @@
 // world.js
-// Builds everything that makes up the lake setting:
-// the animated water, the curvy shoreline with beaches and hills, the wooden dock,
-// trees, rocks and reeds.
+// Builds the scenery for the current level:
+//   Home Lake  – a curvy lake with beaches, hills, trees, reeds and a wooden dock
+//   Space Lakes – lakes on floating islands among the stars, with gaps to fly across
+// Every level ends with a swirling portal.
 //
 // It also exports helper functions other files use:
+//   setLevel(level)        – choose which level the helpers below describe
 //   getWaveHeight(x, z, t) – how high the water is at a spot (so things can float)
 //   getLakeEdges(z)        – the left and right shore at a given Z (so the bobber stays in)
+//   isOverLake(z)          – is there a lake at this Z, or a gap (empty space)?
+//   getWaterBounds()       – the nearest and farthest water in the level
 
 import * as THREE from 'three';
-import { LAKE, DOCK, SHORE, COURSE, COLORS } from './config.js';
+import { LAKE, DOCK, SHORE, COURSE, PORTAL, LEVELS, THEMES, COLORS, MOBILE } from './config.js';
+import { isTouchDevice } from './device.js';
 
-// Front and back ends of the water.
-export const WATER_BOUNDS = {
-  minZ: -LAKE.length - LAKE.extraPastFinish, // far shore
-  maxZ: LAKE.extraBehindStart,               // shore behind the dock
-};
+// Size of the squares in the water and land meshes (bigger on phones = faster).
+const WATER_CELL = isTouchDevice ? MOBILE.waterCellSize : LAKE.waterCellSize;
+const LAND_CELL = isTouchDevice ? MOBILE.terrainCellSize : SHORE.terrainCellSize;
+
+// ---------------------------------------------------------------------------
+// The current level
+// ---------------------------------------------------------------------------
+let level = LEVELS[0];
+
+export function setLevel(newLevel) {
+  level = newLevel;
+}
+export function getLevel() {
+  return level;
+}
+export function getTheme() {
+  return THEMES[level.theme];
+}
+
+// Near end (start side) and far end of all the water in this level.
+export function getWaterBounds() {
+  return { maxZ: level.lakes[0].start, minZ: level.lakes[level.lakes.length - 1].end };
+}
+
+// The lake at this Z (or null over a gap).
+export function getLakeAt(z) {
+  return level.lakes.find((lake) => z <= lake.start && z >= lake.end) || null;
+}
+
+// Is there a lake at this Z? margin = also stay this far from the lake's ends.
+export function isOverLake(z, margin = 0) {
+  return level.lakes.some((lake) => z <= lake.start - margin && z >= lake.end + margin);
+}
 
 // ---------------------------------------------------------------------------
 // Lake shape
 // ---------------------------------------------------------------------------
-// The lake is described by two smooth curves along Z:
-//   lakeCenterX(z)  – where the middle of the lake is (makes it bend left/right)
+// Each lake follows two smooth curves along Z:
+//   lakeCenterX(z)   – where the middle of the lake is (makes it bend left/right)
 //   lakeHalfWidth(z) – half of how wide it is (makes it wider/narrower)
 // Each curve adds a few sine waves of different lengths. Because the lengths don't
 // line up, the result looks irregular, like a real lake, but it's the same every time.
 
-// 0 near the dock, smoothly rising to 1 further out, so the start area stays straight.
+// 0 near the start, smoothly rising to 1 further out, so the start area stays straight.
 function shapeFade(z) {
   return THREE.MathUtils.smoothstep(-z, 0, LAKE.straightStart);
 }
 
 export function lakeCenterX(z) {
   const bend = Math.sin(z * 0.012 + 0.5) * 0.7 + Math.sin(z * 0.037 + 1.7) * 0.3;
-  return shapeFade(z) * LAKE.bendAmount * bend;
+  return shapeFade(z) * level.bend * bend;
 }
 
 export function lakeHalfWidth(z) {
@@ -40,7 +73,7 @@ export function lakeHalfWidth(z) {
     Math.sin(z * 0.019 + 1.0) * 0.55 +
     Math.sin(z * 0.053 + 2.3) * 0.3 +
     Math.sin(z * 0.11 + 0.4) * 0.15;
-  return LAKE.width / 2 + shapeFade(z) * LAKE.widthWiggle * wiggle;
+  return LAKE.width / 2 + shapeFade(z) * level.widthWiggle * wiggle;
 }
 
 // Left and right edge of the water at this Z. The bobber is kept between these.
@@ -50,14 +83,20 @@ export function getLakeEdges(z) {
   return { minX: c - h, maxX: c + h };
 }
 
-// How far a point is from the water's edge.
-// Negative = in the water, positive = on land.
-function distanceFromShore(x, z) {
+// How far a point is from the water's edge. Negative = in the water, positive = on land.
+// onlyLake: measure from just that one lake (used to build each floating island).
+function distanceFromShore(x, z, onlyLake = null) {
   const sideways = Math.abs(x - lakeCenterX(z)) - lakeHalfWidth(z);
-  const pastFar = WATER_BOUNDS.minZ - z;  // positive past the far shore
-  const pastNear = z - WATER_BOUNDS.maxZ; // positive behind the dock
-  // The biggest of the three tells us which edge is closest to being "outside".
-  let d = Math.max(sideways, pastFar, pastNear);
+  // How far past the end of the nearest lake we are (negative = between its ends).
+  let along = Infinity;
+  for (const lake of onlyLake ? [onlyLake] : level.lakes) {
+    along = Math.min(along, Math.max(z - lake.start, lake.end - z));
+  }
+  // Floating islands end soon after the water at their front and back (×2.5 makes the
+  // beach and rim there much shorter), so there's open space between islands to fly over.
+  if (getTheme().islands) along *= 2.5;
+  // The biggest of the two tells us which edge is closest to being "outside".
+  let d = Math.max(sideways, along);
   // Little bumps and coves. They only push the shoreline OUTWARD (d gets smaller),
   // so everything inside getLakeEdges() is always water.
   const bumps = (Math.sin(x * 0.31 + z * 0.17) + Math.sin(x * 0.13 - z * 0.29 + 2.0)) * 0.25 + 0.5;
@@ -65,9 +104,10 @@ function distanceFromShore(x, z) {
   return d;
 }
 
-// Height of the land at (x, z): a sandy slope under the water, a beach, then hills.
-export function getTerrainHeight(x, z) {
-  const d = distanceFromShore(x, z);
+// Height of the land at (x, z): a sandy slope under the water, a beach, then
+// hills (Home Lake) or a rim that drops off into space (floating islands).
+export function getTerrainHeight(x, z, onlyLake = null) {
+  const d = distanceFromShore(x, z, onlyLake);
   if (d < 0) {
     // Under water: the bottom slopes down gently, so shallow water near the shore.
     return Math.max(-4, d * 0.35) - 0.1;
@@ -76,10 +116,16 @@ export function getTerrainHeight(x, z) {
     // Beach: rises from the waterline up to 0.7
     return (d / SHORE.sandWidth) * 0.7;
   }
+  const bumps = 0.3 * Math.sin(x * 0.4) * Math.sin(z * 0.35);
+  if (getTheme().islands) {
+    // Floating island: a grassy rim, then a cliff straight down.
+    const pastRim = d - SHORE.sandWidth - SHORE.islandRim;
+    if (pastRim < 0) return 0.7 + bumps;
+    return Math.max(-8, 0.7 - pastRim * 4);
+  }
   // Grass: gentle bumps close to the beach, growing into hills further away.
   const far = THREE.MathUtils.clamp((d - SHORE.sandWidth - 8) / 50, 0, 1);
   const hills = SHORE.hillHeight * (0.7 + 0.5 * Math.sin(x * 0.05) * Math.cos(z * 0.04));
-  const bumps = 0.3 * Math.sin(x * 0.4) * Math.sin(z * 0.35);
   return 0.7 + far * far * hills + bumps;
 }
 
@@ -90,7 +136,9 @@ export function getTerrainHeight(x, z) {
 // Four sine waves travel in different directions at different speeds and lengths.
 // Because their lengths aren't multiples of each other, the pattern never looks
 // perfectly regular. A slow "swell" makes some patches calmer than others.
+// (Over a gap between space lakes there is no water, so the height is just 0.)
 export function getWaveHeight(x, z, t) {
+  if (!isOverLake(z)) return 0;
   const k = (Math.PI * 2) / LAKE.waveLength; // turns distance into an angle
   const s = LAKE.waveSpeed;
   const w1 = Math.sin(z * k + t * s);
@@ -102,75 +150,101 @@ export function getWaveHeight(x, z, t) {
 }
 
 // ---------------------------------------------------------------------------
-// Build the world
+// Build the world for the current level
 // ---------------------------------------------------------------------------
+// Returns { update(time), dispose() }. dispose() removes everything again,
+// so the next level can be built in its place.
 export function createWorld(scene) {
-  const water = createWater();
-  scene.add(water);
+  const theme = getTheme();
+  const root = new THREE.Group(); // everything for this level goes in here
+  scene.add(root);
 
-  scene.add(createTerrain());
-  scene.add(createDock());
-  scene.add(createTrees());
-  scene.add(createRocks());
-  scene.add(createReeds());
-  scene.add(createStartLine());
-  scene.add(createFinish());
-
-  // Every water point gets its own random amount of extra "chop" and its own timing,
-  // so the surface looks less perfect.
-  const pos = water.geometry.attributes.position;
-  const chopAmount = new Float32Array(pos.count);
-  const chopPhase = new Float32Array(pos.count);
-  for (let i = 0; i < pos.count; i++) {
-    chopAmount[i] = Math.random();
-    chopPhase[i] = Math.random() * Math.PI * 2;
+  // Water: one sheet per lake. Each knows which of its points are really lake
+  // (the rest are tucked away under the land).
+  const waters = [];
+  const lakesToFill = theme.islands ? level.lakes : [null]; // null = one sheet for the whole level
+  for (const lake of lakesToFill) {
+    const water = createWater(theme, lake);
+    root.add(water.mesh);
+    waters.push(water);
   }
 
-  // Called every frame to animate the waves.
+  if (theme.islands) {
+    for (const lake of level.lakes) root.add(createIsland(theme, lake));
+    root.add(createCrystals(theme));
+    root.add(createSpaceSky());
+    root.add(createSpaceStartLine(theme));
+  } else {
+    root.add(createTerrain(theme));
+    root.add(createDock());
+    root.add(createTrees());
+    root.add(createReeds());
+    root.add(createStartLine());
+  }
+  root.add(createRocks(theme));
+  const portal = createPortal(theme);
+  root.add(portal.group);
+
+  // Called every frame to animate the waves and the portal.
   function update(time) {
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const z = pos.getZ(i);
-      const chop = LAKE.waveRandomness * chopAmount[i] * Math.sin(time * 2.2 + chopPhase[i]);
-      pos.setY(i, getWaveHeight(x, z, time) + chop);
-    }
-    pos.needsUpdate = true;
+    for (const w of waters) w.update(time);
+    portal.update(time);
   }
 
-  return { update };
+  // Remove this level's scenery and free its memory.
+  function dispose() {
+    scene.remove(root);
+    root.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+      for (const m of mats) {
+        if (m.map) m.map.dispose();
+        m.dispose();
+      }
+    });
+  }
+
+  return { update, dispose };
 }
 
 // ---------------------------------------------------------------------------
-// Water: one big see-through sheet. The land covers it outside the lake.
+// Water: a see-through, gently waving sheet
 // ---------------------------------------------------------------------------
-function createWater() {
+// lake = one lake (space islands), or null = cover the whole level (Home Lake).
+function createWater(theme, lake) {
   // Wide enough to cover the lake at its widest and most bent point.
-  const halfX = LAKE.width / 2 + LAKE.widthWiggle + LAKE.bendAmount + LAKE.shoreBumps + 10;
-  const minZ = WATER_BOUNDS.minZ - 10;
-  const maxZ = WATER_BOUNDS.maxZ + 10;
+  const halfX = LAKE.width / 2 + level.widthWiggle + level.bend + LAKE.shoreBumps + 10;
+  const bounds = getWaterBounds();
+  const maxZ = (lake ? lake.start : bounds.maxZ) + 10;
+  const minZ = (lake ? lake.end : bounds.minZ) - 10;
   const width = halfX * 2;
   const length = maxZ - minZ;
 
   const geo = new THREE.PlaneGeometry(
     width,
     length,
-    Math.round(width / LAKE.waterCellSize),
-    Math.round(length / LAKE.waterCellSize)
+    Math.round(width / WATER_CELL),
+    Math.round(length / WATER_CELL)
   );
   geo.rotateX(-Math.PI / 2); // PlaneGeometry stands up like a wall; lay it flat
   geo.translate(0, 0, (minZ + maxZ) / 2);
+  const pos = geo.attributes.position;
 
-  // Give each point a slightly different shade of blue-green so the water isn't one flat color.
-  const base = new THREE.Color(COLORS.water);
+  // Each point gets: a slightly different color, its own random "chop", and a flag
+  // saying whether it's really lake. Points that aren't are pushed far down, out of
+  // sight under the island (otherwise water would hang in space past the island's edge).
+  const base = new THREE.Color(theme.water);
   const colors = [];
   const tmp = new THREE.Color();
-  for (let i = 0; i < geo.attributes.position.count; i++) {
-    tmp.copy(base).offsetHSL(
-      THREE.MathUtils.randFloatSpread(0.02),
-      0,
-      THREE.MathUtils.randFloatSpread(0.05)
-    );
+  const chopAmount = new Float32Array(pos.count);
+  const chopPhase = new Float32Array(pos.count);
+  const isLake = new Uint8Array(pos.count);
+  for (let i = 0; i < pos.count; i++) {
+    tmp.copy(base).offsetHSL(THREE.MathUtils.randFloatSpread(0.02), 0, THREE.MathUtils.randFloatSpread(0.05));
     colors.push(tmp.r, tmp.g, tmp.b);
+    chopAmount[i] = Math.random();
+    chopPhase[i] = Math.random() * Math.PI * 2;
+    isLake[i] = !lake || distanceFromShore(pos.getX(i), pos.getZ(i), lake) < SHORE.sandWidth ? 1 : 0;
   }
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
@@ -181,50 +255,69 @@ function createWater() {
     flatShading: true, // gives the low-poly faceted look
     transparent: true,
     opacity: LAKE.waterOpacity,
+    // Space water glows a little, like it's magic.
+    emissive: theme.islands ? theme.water : 0x000000,
+    emissiveIntensity: theme.islands ? 0.12 : 0,
   });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
-  return mesh;
+
+  // Animate the waves: move every point to the wave height (plus its own chop).
+  function update(time) {
+    for (let i = 0; i < pos.count; i++) {
+      if (!isLake[i]) {
+        pos.setY(i, -30);
+        continue;
+      }
+      const x = pos.getX(i);
+      const z = pos.getZ(i);
+      const chop = LAKE.waveRandomness * chopAmount[i] * Math.sin(time * 2.2 + chopPhase[i]);
+      pos.setY(i, getWaveHeight(x, z, time) + chop);
+    }
+    pos.needsUpdate = true;
+  }
+
+  return { mesh, update };
 }
 
 // ---------------------------------------------------------------------------
-// Terrain: one big bumpy sheet for the lake bottom, beaches and hills.
+// Land
 // ---------------------------------------------------------------------------
-function createTerrain() {
-  const halfX = LAKE.width / 2 + SHORE.landSize;
-  const minZ = WATER_BOUNDS.minZ - SHORE.landSize;
-  const maxZ = WATER_BOUNDS.maxZ + SHORE.landSize;
-  const width = halfX * 2;
+// Builds a bumpy sheet of land covering the given area, shaped by getTerrainHeight()
+// and colored as wet sand (under water), beach, or grass.
+function createLandSheet(theme, minX, maxX, minZ, maxZ, onlyLake) {
+  const width = maxX - minX;
   const length = maxZ - minZ;
-
   const geo = new THREE.PlaneGeometry(
     width,
     length,
-    Math.round(width / SHORE.terrainCellSize),
-    Math.round(length / SHORE.terrainCellSize)
+    Math.round(width / LAND_CELL),
+    Math.round(length / LAND_CELL)
   );
   geo.rotateX(-Math.PI / 2);
-  geo.translate(0, 0, (minZ + maxZ) / 2);
+  geo.translate((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
 
   // Move each point up or down to the terrain height, and color it by what it is.
   const pos = geo.attributes.position;
   const colors = [];
-  const sand = new THREE.Color(COLORS.sand);
-  const wetSand = new THREE.Color(COLORS.wetSand);
-  const grass = new THREE.Color(COLORS.grass);
-  const grassDark = new THREE.Color(COLORS.grassDark);
+  const sand = new THREE.Color(theme.sand);
+  const wetSand = new THREE.Color(theme.wetSand);
+  const grass = new THREE.Color(theme.grass);
+  const grassDark = new THREE.Color(theme.grassDark);
+  const rock = new THREE.Color(theme.rock || COLORS.rock);
   const c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const z = pos.getZ(i);
-    const y = getTerrainHeight(x, z);
+    const y = getTerrainHeight(x, z, onlyLake);
     pos.setY(i, y);
 
-    const d = distanceFromShore(x, z);
+    const d = distanceFromShore(x, z, onlyLake);
     // A little noise on the sand/grass border so it isn't a perfect line.
     const edgeNoise = Math.sin(x * 0.5) * Math.cos(z * 0.45) * 1.5;
     if (d < 0) c.copy(wetSand);
     else if (d < SHORE.sandWidth + edgeNoise) c.copy(sand);
+    else if (y < 0.3) c.copy(rock); // island cliff edge
     else c.copy(grass).lerp(grassDark, THREE.MathUtils.clamp(y / SHORE.hillHeight, 0, 1));
     c.offsetHSL(0, 0, THREE.MathUtils.randFloatSpread(0.04));
     colors.push(c.r, c.g, c.b);
@@ -238,8 +331,241 @@ function createTerrain() {
   return mesh;
 }
 
+// Home Lake: one big sheet for the lake bottom, beaches and hills.
+function createTerrain(theme) {
+  const bounds = getWaterBounds();
+  const halfX = LAKE.width / 2 + SHORE.landSize;
+  return createLandSheet(theme, -halfX, halfX, bounds.minZ - SHORE.landSize, bounds.maxZ + SHORE.landSize, null);
+}
+
+// Space: a floating island around one lake. The top is a land sheet; underneath hangs
+// a big upside-down rocky cone, so it looks like a chunk of land floating in space.
+function createIsland(theme, lake) {
+  const group = new THREE.Group();
+  const reach = SHORE.sandWidth + SHORE.islandRim + 4; // how far the island goes past the water
+  const reachZ = reach / 2.5 + 2; // much shorter at the front and back (see distanceFromShore)
+  const halfX = LAKE.width / 2 + level.widthWiggle + level.bend + reach;
+  group.add(createLandSheet(theme, -halfX, halfX, lake.end - reachZ, lake.start + reachZ, lake));
+
+  // The rocky underside. A cone pointing down, stretched to the island's shape.
+  // (Multiplying the half-sizes by 1.2 makes the cone's top reach out near the corners.)
+  const halfZ = (lake.start - lake.end) / 2 + reachZ;
+  const depth = 50;
+  const coneGeo = new THREE.ConeGeometry(1, depth, 10, 4);
+  // Push each point in or out a little so the rock looks rough, not smooth.
+  const p = coneGeo.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const wobble = 1 + THREE.MathUtils.randFloatSpread(0.25);
+    p.setX(i, p.getX(i) * wobble);
+    p.setZ(i, p.getZ(i) * wobble);
+  }
+  coneGeo.computeVertexNormals();
+  const cone = new THREE.Mesh(coneGeo, new THREE.MeshStandardMaterial({ color: theme.rock, flatShading: true }));
+  cone.rotation.x = Math.PI; // point down
+  cone.scale.set(halfX * 1.2, 1, halfZ * 1.2);
+  cone.position.set(lakeCenterX((lake.start + lake.end) / 2), -8 - depth / 2, (lake.start + lake.end) / 2);
+  group.add(cone);
+  return group;
+}
+
 // ---------------------------------------------------------------------------
-// Dock: planks on posts, running from the near shore out to the start line (Z = 0)
+// Space sky: stars, planets and drifting rocks
+// ---------------------------------------------------------------------------
+function createSpaceSky() {
+  const group = new THREE.Group();
+
+  // Stars: lots of tiny points scattered on a huge ball around the course.
+  // "fog: false" so the fog doesn't hide them.
+  const starCount = 1500;
+  const starPositions = new Float32Array(starCount * 3);
+  for (let i = 0; i < starCount; i++) {
+    // A random direction: pick random angles around and up/down, then go out 700 units.
+    const around = Math.random() * Math.PI * 2;
+    const up = Math.acos(THREE.MathUtils.randFloatSpread(2));
+    starPositions[i * 3] = 700 * Math.sin(up) * Math.cos(around);
+    starPositions[i * 3 + 1] = 700 * Math.cos(up);
+    starPositions[i * 3 + 2] = 700 * Math.sin(up) * Math.sin(around) - 200;
+  }
+  const starGeo = new THREE.BufferGeometry();
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+  group.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 2, sizeAttenuation: false, fog: false })));
+
+  // A big ringed planet and a small moon, far away.
+  const planet = new THREE.Mesh(
+    new THREE.SphereGeometry(70, 32, 16),
+    new THREE.MeshStandardMaterial({ color: 0xff9e6b, flatShading: true, fog: false })
+  );
+  planet.position.set(-320, 140, -720);
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(115, 8, 2, 64),
+    new THREE.MeshBasicMaterial({ color: 0xffd8a8, transparent: true, opacity: 0.6, fog: false })
+  );
+  ring.rotation.set(Math.PI / 2.4, 0.3, 0);
+  planet.add(ring);
+  const moon = new THREE.Mesh(
+    new THREE.SphereGeometry(28, 24, 12),
+    new THREE.MeshStandardMaterial({ color: 0x9fb4ff, flatShading: true, fog: false })
+  );
+  moon.position.set(360, 90, -560);
+  group.add(planet, moon);
+
+  // Small rocks drifting below and beside the islands.
+  const rockGeo = new THREE.DodecahedronGeometry(1, 0);
+  const rockMat = new THREE.MeshStandardMaterial({ color: 0x5a4b78, flatShading: true });
+  for (let i = 0; i < 40; i++) {
+    const rock = new THREE.Mesh(rockGeo, rockMat);
+    const side = Math.random() < 0.5 ? -1 : 1;
+    rock.position.set(side * THREE.MathUtils.randFloat(70, 160), THREE.MathUtils.randFloat(-60, 30), THREE.MathUtils.randFloat(-460, 40));
+    rock.scale.setScalar(THREE.MathUtils.randFloat(1, 6));
+    rock.rotation.set(Math.random() * 3, Math.random() * 3, 0);
+    group.add(rock);
+  }
+  return group;
+}
+
+// Glowing crystals growing on the island rims (instead of trees).
+function createCrystals(theme) {
+  const group = new THREE.Group();
+  const geo = new THREE.OctahedronGeometry(1, 0);
+  const mats = theme.crystals.map(
+    (color) => new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.6, flatShading: true })
+  );
+  for (let i = 0; i < SHORE.crystalCount; i++) {
+    const { x, z } = randomSpotNearShore(SHORE.sandWidth + 1, SHORE.sandWidth + SHORE.islandRim - 1);
+    const crystal = new THREE.Mesh(geo, mats[i % mats.length]);
+    const size = THREE.MathUtils.randFloat(0.8, 2);
+    crystal.scale.set(size * 0.6, size * 2, size * 0.6); // tall and pointy
+    crystal.position.set(x, getTerrainHeight(x, z) + size, z);
+    crystal.rotation.set(THREE.MathUtils.randFloatSpread(0.4), Math.random() * 3, THREE.MathUtils.randFloatSpread(0.4));
+    crystal.castShadow = true;
+    group.add(crystal);
+  }
+  return group;
+}
+
+// Space start line: a glowing strip across the water with two beacons.
+function createSpaceStartLine(theme) {
+  const group = new THREE.Group();
+  const edges = getLakeEdges(0);
+  const width = edges.maxX - edges.minX;
+  const strip = new THREE.Mesh(
+    new THREE.PlaneGeometry(width, 0.8),
+    new THREE.MeshBasicMaterial({ color: theme.portalGlow, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false })
+  );
+  strip.rotation.x = -Math.PI / 2;
+  strip.position.set((edges.minX + edges.maxX) / 2, 0.5, 0.8);
+  group.add(strip);
+  const beaconMat = new THREE.MeshStandardMaterial({ color: theme.portalGlow, emissive: theme.portalGlow, emissiveIntensity: 0.8 });
+  for (const x of [edges.minX - 2, edges.maxX + 2]) {
+    const beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.6, 4, 8), beaconMat);
+    beacon.position.set(x, 2.5, 0.8);
+    group.add(beacon);
+  }
+  return group;
+}
+
+// ---------------------------------------------------------------------------
+// The portal at the finish: a glowing ring with a swirl spinning inside it
+// ---------------------------------------------------------------------------
+
+// Draws a spiral on a hidden canvas, used as the swirling inside of the portal.
+function makeSwirlTexture(colorA, colorB) {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const a = '#' + new THREE.Color(colorA).getHexString();
+  const b = '#' + new THREE.Color(colorB).getHexString();
+  // A soft glow from the middle outward...
+  const glow = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  glow.addColorStop(0, '#ffffff');
+  glow.addColorStop(0.12, b);
+  glow.addColorStop(0.6, a);
+  glow.addColorStop(1, '#1a0b3d');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, size, size);
+  // ...with spiral arms on top. Each arm is a line that winds outward as the angle grows.
+  ctx.strokeStyle = b;
+  ctx.lineWidth = 10;
+  for (let arm = 0; arm < 4; arm++) {
+    ctx.beginPath();
+    for (let t = 0; t < 1; t += 0.01) {
+      const angle = arm * (Math.PI / 2) + t * Math.PI * 3;
+      const r = t * size * 0.5;
+      const x = size / 2 + Math.cos(angle) * r;
+      const y = size / 2 + Math.sin(angle) * r;
+      if (t === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function createPortal(theme) {
+  const group = new THREE.Group();
+  const z = level.finishZ;
+  group.position.set(lakeCenterX(z), PORTAL.centerHeight, z);
+
+  // The ring: a fat glowing donut standing upright.
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(PORTAL.radius, PORTAL.tube, 12, 48),
+    new THREE.MeshStandardMaterial({ color: theme.portal, emissive: theme.portal, emissiveIntensity: 0.7, roughness: 0.3 })
+  );
+  group.add(ring);
+
+  // Two swirl discs inside, spinning in opposite directions for a deep, magical look.
+  // The back one is solid; the front one is see-through and "adds" light on top.
+  const texture = makeSwirlTexture(theme.portal, theme.portalGlow);
+  const discs = [0.95, 0.35].map((opacity, i) => {
+    const disc = new THREE.Mesh(
+      new THREE.CircleGeometry(PORTAL.radius - 0.3, 48),
+      new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        opacity,
+        side: THREE.DoubleSide,
+        blending: i === 0 ? THREE.NormalBlending : THREE.AdditiveBlending,
+        depthWrite: false,
+        fog: false,
+      })
+    );
+    disc.position.z = i * 0.4; // the see-through one in front
+    group.add(disc);
+    return disc;
+  });
+
+  // Little sparkles orbiting around the ring.
+  const sparkleGeo = new THREE.OctahedronGeometry(0.35);
+  const sparkleMat = new THREE.MeshBasicMaterial({ color: theme.portalGlow });
+  const sparkles = [];
+  for (let i = 0; i < 18; i++) {
+    const s = new THREE.Mesh(sparkleGeo, sparkleMat);
+    group.add(s);
+    sparkles.push({ mesh: s, offset: (i / 18) * Math.PI * 2, wobble: Math.random() * 3 });
+  }
+
+  function update(time) {
+    discs[0].rotation.z = time * PORTAL.spinSpeed;
+    discs[1].rotation.z = -time * PORTAL.spinSpeed * 0.7;
+    const pulse = 1 + Math.sin(time * 3) * 0.03;
+    ring.scale.setScalar(pulse);
+    for (const s of sparkles) {
+      // Going around a circle: cos and sin of an angle that grows over time.
+      const angle = s.offset + time * 0.8;
+      const r = PORTAL.radius + 1.6 + Math.sin(time * 2 + s.wobble) * 0.6;
+      s.mesh.position.set(Math.cos(angle) * r, Math.sin(angle) * r, 0);
+      s.mesh.rotation.y = time * 4;
+    }
+  }
+
+  return { group, update };
+}
+
+// ---------------------------------------------------------------------------
+// Home Lake: dock and start line
 // ---------------------------------------------------------------------------
 function createDock() {
   const group = new THREE.Group();
@@ -247,7 +573,7 @@ function createDock() {
   const darkMat = new THREE.MeshStandardMaterial({ color: COLORS.woodDark, flatShading: true });
 
   // The dock reaches from Z = 0 back onto the beach.
-  const length = WATER_BOUNDS.maxZ + SHORE.sandWidth;
+  const length = getWaterBounds().maxZ + SHORE.sandWidth;
   const h = DOCK.deckHeight;
 
   // Planks: thin boxes lying across the dock, with a small gap between each.
@@ -326,9 +652,7 @@ function createDock() {
   return group;
 }
 
-// ---------------------------------------------------------------------------
-// Start line: a white stripe painted across the end of the dock, with a little flag
-// ---------------------------------------------------------------------------
+// A white stripe painted across the end of the dock, with a little flag
 function createStartLine() {
   const group = new THREE.Group();
   const h = DOCK.deckHeight;
@@ -341,7 +665,7 @@ function createStartLine() {
   stripe.receiveShadow = true;
   group.add(stripe);
 
-  // Flag: a thin pole with a triangle-ish flag (a thin box) near the top.
+  // Flag: a thin pole with a flag (a thin box) near the top.
   const pole = new THREE.Mesh(
     new THREE.CylinderGeometry(0.06, 0.06, 3, 6),
     new THREE.MeshStandardMaterial({ color: 0xdddddd })
@@ -359,95 +683,21 @@ function createStartLine() {
 }
 
 // ---------------------------------------------------------------------------
-// Finish: two tall red-and-white striped buoy posts with a checkered banner on top
-// ---------------------------------------------------------------------------
-
-// Draws a black-and-white checkerboard on a hidden canvas and turns it into a texture.
-// (We draw it ourselves, so no image files are needed.)
-function makeCheckerTexture(columns, rows) {
-  const size = 32; // pixels per square
-  const canvas = document.createElement('canvas');
-  canvas.width = columns * size;
-  canvas.height = rows * size;
-  const ctx = canvas.getContext('2d');
-  for (let cx = 0; cx < columns; cx++) {
-    for (let cy = 0; cy < rows; cy++) {
-      ctx.fillStyle = (cx + cy) % 2 === 0 ? '#111111' : '#ffffff';
-      ctx.fillRect(cx * size, cy * size, size, size);
-    }
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
-function createFinish() {
-  const group = new THREE.Group();
-  const z = COURSE.finishZ;
-  const centerX = lakeCenterX(z);
-  const half = COURSE.finishWidth / 2;
-  const height = COURSE.finishHeight;
-  const red = new THREE.MeshStandardMaterial({ color: COLORS.finishRed, flatShading: true });
-  const white = new THREE.MeshStandardMaterial({ color: COLORS.finishWhite, flatShading: true });
-
-  // Each post is a stack of short cylinders, alternating red and white.
-  const stripes = 6;
-  const stripeHeight = height / stripes;
-  const stripeGeo = new THREE.CylinderGeometry(1.3, 1.5, stripeHeight, 12);
-  for (const side of [-1, 1]) {
-    const post = new THREE.Group();
-    for (let i = 0; i < stripes; i++) {
-      const piece = new THREE.Mesh(stripeGeo, i % 2 ? white : red);
-      piece.position.y = i * stripeHeight + stripeHeight / 2 - 1; // starts a little under water
-      piece.castShadow = true;
-      post.add(piece);
-    }
-    const ball = new THREE.Mesh(new THREE.SphereGeometry(1.6, 12, 8), red);
-    ball.position.y = height - 0.5;
-    ball.castShadow = true;
-    post.add(ball);
-    post.position.set(centerX + side * half, 0, z);
-    group.add(post);
-  }
-
-  // Checkered banner stretched between the two posts.
-  const bannerWidth = COURSE.finishWidth;
-  const banner = new THREE.Mesh(
-    new THREE.BoxGeometry(bannerWidth, 2.4, 0.3),
-    new THREE.MeshStandardMaterial({ map: makeCheckerTexture(Math.round(bannerWidth / 1.2), 2) })
-  );
-  banner.position.set(centerX, height - 2, z);
-  banner.castShadow = true;
-  group.add(banner);
-
-  // A see-through checkered strip on the water marks the exact finish line.
-  const lineTex = makeCheckerTexture(Math.round(bannerWidth / 1.5), 1);
-  const line = new THREE.Mesh(
-    new THREE.PlaneGeometry(bannerWidth, 1.5),
-    new THREE.MeshBasicMaterial({ map: lineTex, transparent: true, opacity: 0.6, depthWrite: false })
-  );
-  line.rotation.x = -Math.PI / 2;
-  line.position.set(centerX, 0.6, z);
-  group.add(line);
-
-  return group;
-}
-
-// ---------------------------------------------------------------------------
 // Trees, rocks and reeds
 // ---------------------------------------------------------------------------
 
 // Picks a random spot whose distance from the water is between minD and maxD.
 function randomSpotNearShore(minD, maxD) {
   const halfX = LAKE.width / 2 + SHORE.landSize - 10;
-  for (let tries = 0; tries < 1000; tries++) {
+  const bounds = getWaterBounds();
+  for (let tries = 0; tries < 2000; tries++) {
     const x = THREE.MathUtils.randFloat(-halfX, halfX);
-    const z = THREE.MathUtils.randFloat(WATER_BOUNDS.minZ - 60, WATER_BOUNDS.maxZ + 60);
+    const z = THREE.MathUtils.randFloat(bounds.minZ - 60, bounds.maxZ + 60);
     const d = distanceFromShore(x, z);
-    const nearDock = Math.abs(x) < DOCK.width / 2 + 4 && z > -2; // keep the dock clear
+    const nearDock = !getTheme().islands && Math.abs(x) < DOCK.width / 2 + 4 && z > -2; // keep the dock clear
     if (d >= minD && d <= maxD && !nearDock) return { x, z };
   }
-  return { x: 0, z: WATER_BOUNDS.maxZ + 60 };
+  return { x: 0, z: bounds.maxZ + 60 };
 }
 
 function createTrees() {
@@ -479,10 +729,10 @@ function createTrees() {
   return group;
 }
 
-function createRocks() {
+function createRocks(theme) {
   const group = new THREE.Group();
   const rockGeo = new THREE.DodecahedronGeometry(1, 0);
-  const rockMat = new THREE.MeshStandardMaterial({ color: COLORS.rock, flatShading: true });
+  const rockMat = new THREE.MeshStandardMaterial({ color: theme.rock || COLORS.rock, flatShading: true });
 
   for (let i = 0; i < SHORE.rockCount; i++) {
     // Rocks sit on the beach, some right at the waterline.

@@ -1,14 +1,14 @@
 // main.js
 // The starting point of the game. It creates everything (scene, world, bobber,
-// checkpoints, obstacles, wildlife, effects, HUD, menus), switches between the
-// screens (title, settings, playing, paused, game over, victory), and runs the main loop:
-// update everything, check for hits, move the camera, draw a frame, repeat
+// checkpoints, obstacles, wildlife, effects, HUD, menus), loads levels, switches between
+// the screens (title, settings, playing, paused, level complete, game over), and runs
+// the main loop: update everything, check for hits, move the camera, draw a frame, repeat
 // (about 60 times a second).
 
 import * as THREE from 'three';
-import { CAMERA, BOBBER, OBSTACLES, LAKE, COURSE, EFFECTS, FLY, SHOOT } from './config.js';
+import { CAMERA, BOBBER, OBSTACLES, EFFECTS, FLY, SHOOT, PORTAL, LEVELS } from './config.js';
 import { createScene, getChaseCameraPose } from './scene.js';
-import { createWorld, lakeCenterX } from './world.js';
+import { createWorld, lakeCenterX, setLevel, getLevel, getTheme } from './world.js';
 import { createBobber } from './bobber.js';
 import { createCheckpoints } from './checkpoints.js';
 import { createObstacles, setSplashHandler } from './obstacles.js';
@@ -19,15 +19,13 @@ import { createCoins } from './coins.js';
 import { createShooter } from './shooting.js';
 import { createUI } from './ui.js';
 import { loadSettings, saveSettings, applySettings, loadBestScores, recordScore } from './settings.js';
-import { playChime, playFanfare, playBuzz, playSplash, playGameOver, playDing, playGoldenDing, setMuted, setThrust, playPlop, playZap, playPoof } from './audio.js';
+import { playChime, playFanfare, playBuzz, playSplash, playGameOver, playDing, playGoldenDing, setMuted, setThrust, playPlop, playZap, playPoof, playFall, playWarp, setAmbientTheme, playReload } from './audio.js';
 
 const canvas = document.getElementById('game');
-const { renderer, scene, camera, followWithSun } = createScene(canvas);
-const world = createWorld(scene);
+const { renderer, scene, camera, followWithSun, applyTheme } = createScene(canvas);
 const bobber = createBobber(scene, camera, canvas);
 const checkpoints = createCheckpoints(scene);
 const obstacles = createObstacles(scene);
-const wildlife = createWildlife(scene);
 const effects = createEffects(scene);
 const coins = createCoins(scene);
 const shooter = createShooter(scene, canvas);
@@ -51,13 +49,32 @@ const previousPosition = new THREE.Vector3();
 let settingsReturnTo = 'title';
 
 // ---------------------------------------------------------------------------
-// Screens: title, settings, pause, playing, game over, victory
+// Levels
+// ---------------------------------------------------------------------------
+// The scenery for the level we're on. Rebuilt only when the level changes.
+let world = null;
+let wildlife = null; // frogs and birds (Home Lake only)
+let loadedLevel = -1;
+let livesAtLevelStart = 0; // so Restart can start the level over fairly
+
+function loadLevel(index) {
+  if (world) world.dispose();
+  if (wildlife) wildlife.dispose();
+  setLevel(LEVELS[index]); // tells world.js (and everything using it) which lakes exist
+  applyTheme(getTheme()); // sky, fog and light colors
+  world = createWorld(scene);
+  wildlife = getTheme().wildlife ? createWildlife(scene) : null;
+  setAmbientTheme(getLevel().theme); // lake sounds or space hum
+  loadedLevel = index;
+}
+
+// ---------------------------------------------------------------------------
+// Screens: title, settings, pause, playing, level complete, game over
 // ---------------------------------------------------------------------------
 
-// Sets up a fresh course: new gates, new obstacles, bobber back at the dock.
+// Sets up the course for the current level: new gates, new obstacles, bobber at the start.
 function setUpCourse() {
-  applySettings(settings); // difficulty and obstacle count take effect here
-  game.reset();
+  if (loadedLevel !== game.levelIndex) loadLevel(game.levelIndex);
   checkpoints.reset(); // new random gate layout...
   obstacles.build(OBSTACLES.count, checkpoints.getGateCenters()); // ...and new obstacles around it
   bobber.reset(0, BOBBER.startZ);
@@ -71,19 +88,50 @@ function setUpCourse() {
 }
 
 function goToTitle() {
+  applySettings(settings);
+  game.newRun(0);
   setUpCourse();
   game.state = 'title';
   bobber.setControlsEnabled(false);
   ui.setTitleMode(true);
-  ui.showTitle(loadBestScores(), settings);
+  ui.showTitle(loadBestScores(), settings, LEVELS);
 }
 
-function startGame() {
+// Start a new run. levelIndex lets the title screen start straight at a later level.
+function startGame(levelIndex = 0) {
+  applySettings(settings); // difficulty and obstacle count take effect here
+  game.newRun(levelIndex);
+  beginLevel();
+}
+
+// Start (or restart) the level we're on.
+function beginLevel() {
+  livesAtLevelStart = game.lives;
   setUpCourse();
   game.state = 'playing';
   bobber.setControlsEnabled(true);
   ui.setTitleMode(false);
   ui.hideMenu();
+  ui.setLevelName(getLevel().name);
+  ui.showToast(`Level ${game.levelIndex + 1}: ${getLevel().name}`, 2.5);
+}
+
+// R / Restart: start this level over (with the lives you had when it began).
+function restartLevel() {
+  if (game.state === 'title') return;
+  game.lives = livesAtLevelStart;
+  game.reset();
+  beginLevel();
+}
+
+// After the level-complete screen: warp through the portal to the next level.
+function enterPortal() {
+  playWarp();
+  ui.flash(() => {
+    game.levelIndex++;
+    game.reset(); // new score and timer for this level; lives carry over
+    beginLevel();
+  });
 }
 
 function openSettings() {
@@ -98,7 +146,7 @@ function showSettingsScreen() {
 
 function closeSettings() {
   if (settingsReturnTo === 'pause') ui.showPause();
-  else ui.showTitle(loadBestScores(), settings);
+  else ui.showTitle(loadBestScores(), settings, LEVELS);
 }
 
 // Pausing only works while racing.
@@ -114,26 +162,41 @@ function togglePause() {
   }
 }
 
-function showVictory() {
+// Flew through the portal: show this level's score. If there's another level, the
+// button warps you there; after the last level, it's the final victory screen.
+function showLevelComplete() {
   const result = game.finalScore();
-  const isNewBest = recordScore(settings.difficulty, result.total);
-  ui.showVictory(result, isNewBest, loadBestScores()[settings.difficulty]);
+  game.runTotal += result.total;
+  const next = LEVELS[game.levelIndex + 1];
+  if (next) {
+    ui.showLevelComplete(result, game.runTotal, getLevel().name, next.name);
+  } else {
+    const isNewBest = recordScore(settings.difficulty, game.runTotal);
+    ui.showVictory(result, game.runTotal, isNewBest, loadBestScores()[settings.difficulty]);
+  }
 }
 
 function showGameOver() {
-  ui.showGameOver(game.currentScore(), checkpoints.passed, checkpoints.total);
+  const total = game.runScoreSoFar();
+  const isNewBest = recordScore(settings.difficulty, total);
+  ui.showGameOver(total, checkpoints.passed, checkpoints.total, getLevel().name, isNewBest);
 }
 
 // ----- Menu buttons -----
-ui.on('play', startGame);
+ui.on('play', () => startGame(0));
+ui.on('playLevel', (index) => startGame(Number(index)));
+ui.on('nextLevel', enterPortal);
 ui.on('settings', openSettings);
 ui.on('back', closeSettings);
 ui.on('resume', togglePause);
 ui.on('pause', togglePause);
 ui.on('quit', goToTitle);
-ui.on('restart', () => {
-  if (game.state !== 'title') startGame();
-});
+ui.on('restart', restartLevel);
+// On-screen touch buttons
+ui.on('flyDown', () => bobber.setFlyButton(true));
+ui.on('flyUp', () => bobber.setFlyButton(false));
+ui.on('zapDown', () => shooter.setButton(true));
+ui.on('zapUp', () => shooter.setButton(false));
 ui.on('mute', toggleMute);
 function toggleMute() {
   settings.muted = !settings.muted;
@@ -162,8 +225,8 @@ window.addEventListener('keydown', (e) => {
   const settingsOpen = !!document.getElementById('speed-slider');
   if (e.key === 'm' || e.key === 'M') toggleMute();
   if (e.key === 'Escape' && settingsOpen) return closeSettings();
-  if ((e.key === 'Enter' || e.key === ' ') && game.state === 'title' && !settingsOpen) return startGame();
-  if ((e.key === 'r' || e.key === 'R') && game.state !== 'title') startGame();
+  if ((e.key === 'Enter' || e.key === ' ') && game.state === 'title' && !settingsOpen) return startGame(0);
+  if ((e.key === 'r' || e.key === 'R') && game.state !== 'title') restartLevel();
   if ((e.key === 'p' || e.key === 'P' || e.key === 'Escape') && !settingsOpen) togglePause();
 });
 
@@ -177,9 +240,9 @@ function resetHUD() {
   ui.setProgressCheckpoints(gateFractions(), 0);
 }
 
-// How far along the course each checkpoint is (0 = dock, 1 = finish), for the progress bar.
+// How far along the course each checkpoint is (0 = start, 1 = portal), for the progress bar.
 function gateFractions() {
-  return checkpoints.getGateCenters().map((g) => -g.z / LAKE.length);
+  return checkpoints.getGateCenters().map((g) => g.z / getLevel().finishZ);
 }
 
 // Adds points to the score and shows the little "+10" pop.
@@ -195,9 +258,10 @@ function handleCourseEvent(event) {
     playChime();
     effects.sparkle(bobber.position.x, bobber.mesh.position.y + 1, bobber.position.z, true);
     scorePoints(game.addCheckpoint());
+    shooter.addAmmo(SHOOT.checkpointBonus); // checkpoints earn extra zaps
     ui.setCheckpoints(event.checkpoint, checkpoints.total);
     ui.setProgressCheckpoints(gateFractions(), event.checkpoint);
-    ui.showToast(`Checkpoint ${event.checkpoint}!`);
+    ui.showToast(`Checkpoint ${event.checkpoint}! +${SHOOT.checkpointBonus} zaps`);
     ui.setWarning(null);
   } else if (event.missed) {
     playBuzz();
@@ -216,9 +280,10 @@ function handleCourseEvent(event) {
   } else if (event.finished) {
     game.state = 'won';
     playFanfare();
-    effects.confetti(lakeCenterX(COURSE.finishZ), COURSE.finishHeight - 1, COURSE.finishZ);
+    const fz = getLevel().finishZ;
+    effects.confetti(lakeCenterX(fz), PORTAL.centerHeight, fz);
     bobber.setControlsEnabled(false);
-    showVictory();
+    showLevelComplete();
   }
 }
 
@@ -229,8 +294,12 @@ function updateCoins(dt, time) {
   const playing = game.state === 'playing';
   const picked = coins.update(dt, time, bobber, obstacles.isClear, playing, playing && !game.isRespawning());
   for (const p of picked) {
-    effects.sparkle(p.x, p.y, p.z, p.golden);
-    if (p.golden) {
+    effects.sparkle(p.x, p.y, p.z, p.kind !== 'coin');
+    if (p.kind === 'zapPack') {
+      playReload();
+      shooter.addAmmo(SHOOT.packAmount);
+      ui.showToast(`⚡ Zap Pack! +${SHOOT.packAmount} zaps`);
+    } else if (p.golden) {
       playGoldenDing();
       scorePoints(game.addGoldenLure());
       ui.showToast('Golden Lure! +50');
@@ -256,7 +325,8 @@ function updateShooting(dt, time) {
     scorePoints(game.addZap());
   }
   for (const p of shots.splashes) effects.splash(p.x, p.y, p.z, 0.25); // missed, hit the water
-  ui.setAmmo(shooter.ammo, SHOOT.maxAmmo);
+  // Show at least the normal number of dots, more when carrying extra.
+  ui.setAmmo(shooter.ammo, Math.max(SHOOT.maxAmmo, shooter.ammo));
 }
 
 // ---------------------------------------------------------------------------
@@ -270,17 +340,27 @@ function checkForHits() {
   effects.splash(bobber.position.x, bobber.mesh.position.y - BOBBER.floatOffset, bobber.position.z);
   shakeTimer = EFFECTS.shakeTime;
   playSplash();
+  loseALife('Splash!');
+}
+
+// Fell into a gap between space lakes.
+function fellIntoSpace() {
+  if (game.state !== 'playing' || game.isRespawning()) return;
+  playFall();
+  loseALife('Lost in space!');
+}
+
+function loseALife(message) {
   bobber.reset(bobber.position.x, bobber.position.z);
   bobber.setVisible(false);
   bobber.setControlsEnabled(false);
-
   const outOfLives = game.loseLife();
   ui.setLives(game.lives, game.maxLives);
   if (outOfLives) {
     playGameOver();
     showGameOver();
   } else {
-    ui.showToast(game.lives === 1 ? 'Splash! Last life!' : `Splash! ${game.lives} lives left`, 2);
+    ui.showToast(game.lives === 1 ? `${message} Last life!` : `${message} ${game.lives} lives left`, 2);
   }
 }
 
@@ -354,13 +434,14 @@ function step(dt) {
   world.update(time);
   obstacles.update(dt, time, bobber, game.isInvincible()); // also lets lily pads / whirlpools push the bobber
   if (game.isRespawning()) bobber.velocity.set(0, 0, 0); // stay put while "under water"
-  wildlife.update(dt, bobber.position);
+  if (wildlife) wildlife.update(dt, bobber.position);
   const wakeOn = game.state === 'playing' && !game.isRespawning() && bobber.onWater;
   effects.update(dt, time, bobber, wakeOn);
   updateCoins(dt, time);
 
   previousPosition.copy(bobber.position); // remember where we were, to detect crossing lines
   const flightEvent = bobber.update(dt, time);
+  if (flightEvent && flightEvent.fell) fellIntoSpace();
   if (flightEvent && flightEvent.landed && game.state === 'playing') {
     // Splashing down after a flight
     effects.splash(bobber.position.x, bobber.mesh.position.y - BOBBER.floatOffset, bobber.position.z, 0.6);
@@ -375,7 +456,7 @@ function step(dt) {
   if (!game.timerRunning && bobber.position.z < BOBBER.startZ - 1) game.timerRunning = true;
   if (game.update(dt)) respawn(); // true when the respawn wait just finished
   ui.setTimer(formatTime(game.time));
-  ui.setProgress(-bobber.position.z / LAKE.length);
+  ui.setProgress(bobber.position.z / getLevel().finishZ);
   const f = bobber.flight;
   ui.setEnergy(f.energy, !f.flying && f.energy < FLY.minEnergyToFly);
   if (game.state === 'playing' && !game.isRespawning()) bobber.setVisible(game.blinkVisible());

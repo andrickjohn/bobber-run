@@ -1,9 +1,11 @@
 // scene.js
 // Sets up the basic 3D stage: the renderer (draws to the canvas),
 // the scene (holds every object), the camera, the lights, the sky color and fog.
+// applyTheme() changes the sky, fog and lights when a new level loads.
 
 import * as THREE from 'three';
-import { SCENE, CAMERA, COLORS } from './config.js';
+import { SCENE, CAMERA, MOBILE } from './config.js';
+import { isTouchDevice } from './device.js';
 import { lakeCenterX } from './world.js';
 
 export function createScene(canvas) {
@@ -11,15 +13,17 @@ export function createScene(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   // High-DPI screens look sharper with a higher pixel ratio, but we cap it
   // so Chromebooks don't have to draw too many pixels.
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, SCENE.maxPixelRatio));
+  // (Phones get a lower cap, since they're slower.)
+  const maxRatio = isTouchDevice ? MOBILE.maxPixelRatio : SCENE.maxPixelRatio;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxRatio));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap; // smooth-edged shadows
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(COLORS.sky);
+  scene.background = new THREE.Color();
   // Fog fades far-away things into the sky color, so the far shore "fades in".
-  scene.fog = new THREE.Fog(COLORS.sky, SCENE.fogNear, SCENE.fogFar);
+  scene.fog = new THREE.Fog(0xffffff, 60, 300);
 
   const camera = new THREE.PerspectiveCamera(
     SCENE.cameraFov,
@@ -32,13 +36,14 @@ export function createScene(canvas) {
   camera.lookAt(0, 0, -20);
 
   // Soft light from the whole sky (blue-ish from above, green-ish from below).
-  const hemi = new THREE.HemisphereLight(COLORS.hemiSky, COLORS.hemiGround, SCENE.hemiIntensity);
+  const hemi = new THREE.HemisphereLight();
   scene.add(hemi);
 
   // The sun: one directional light that casts shadows.
-  const sun = new THREE.DirectionalLight(COLORS.sun, SCENE.sunIntensity);
+  const sun = new THREE.DirectionalLight();
   sun.castShadow = true;
-  sun.shadow.mapSize.set(SCENE.shadowMapSize, SCENE.shadowMapSize);
+  const shadowSize = isTouchDevice ? MOBILE.shadowMapSize : SCENE.shadowMapSize;
+  sun.shadow.mapSize.set(shadowSize, shadowSize);
   // The shadow "box" covers the area around the sun's target.
   const s = 70;
   sun.shadow.camera.left = -s;
@@ -59,14 +64,31 @@ export function createScene(canvas) {
   }
   followWithSun(new THREE.Vector3(0, 0, 0));
 
-  // Keep everything the right size when the window is resized.
-  window.addEventListener('resize', () => {
+  // Keep everything the right size when the window is resized (or a phone is turned).
+  // A tall, narrow screen gets a wider field of view so you can still see the lake.
+  function fitToWindow() {
     camera.aspect = window.innerWidth / window.innerHeight;
+    camera.fov = camera.aspect < 1 ? SCENE.portraitFov : SCENE.cameraFov;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
-  });
+  }
+  window.addEventListener('resize', fitToWindow);
+  fitToWindow();
 
-  return { renderer, scene, camera, sun, followWithSun };
+  // Sets the sky, fog and light colors for a level's theme (from THEMES in config.js).
+  function applyTheme(theme) {
+    scene.background.set(theme.sky);
+    scene.fog.color.set(theme.fog);
+    scene.fog.near = theme.fogNear;
+    scene.fog.far = theme.fogFar;
+    hemi.color.set(theme.hemiSky);
+    hemi.groundColor.set(theme.hemiGround);
+    hemi.intensity = theme.hemiIntensity;
+    sun.color.set(theme.sun);
+    sun.intensity = theme.sunIntensity;
+  }
+
+  return { renderer, scene, camera, sun, followWithSun, applyTheme };
 }
 
 // Where the chase camera wants to be for a bobber at position p, and the point it looks at.

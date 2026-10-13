@@ -1,11 +1,12 @@
 // coins.js
-// Gold coins (and the rare Golden Lure) that pop up on the lake ahead of the player.
+// Gold coins (plus the rare Golden Lure and the ⚡ Zap Pack) that pop up on the lake
+// ahead of the player.
 // They spin, bob on the waves, and fade away if nobody grabs them in time.
 // Touching one collects it. This file only reports pickups; game.js adds the points.
 
 import * as THREE from 'three';
-import { COINS, COLORS, LAKE } from './config.js';
-import { getWaveHeight, getLakeEdges, WATER_BOUNDS } from './world.js';
+import { COINS, COLORS } from './config.js';
+import { getWaveHeight, getLakeEdges, getWaterBounds, getLevel, isOverLake } from './world.js';
 
 const rand = THREE.MathUtils.randFloat;
 
@@ -50,6 +51,21 @@ function makeGoldenLureModel() {
   return { group, materials: [bodyMat, hookMat] };
 }
 
+// The Zap Pack: a glowing blue crystal with a ring around it. Gives you more zaps.
+const packGeo = new THREE.OctahedronGeometry(0.7);
+const packRingGeo = new THREE.TorusGeometry(1.0, 0.08, 6, 24);
+function makeZapPackModel() {
+  const mat = makeCoinMaterial(COLORS.zapPack);
+  const ringMat = makeCoinMaterial(0xffffff);
+  const group = new THREE.Group();
+  const crystal = new THREE.Mesh(packGeo, mat);
+  crystal.scale.set(0.8, 1.3, 0.8);
+  const ring = new THREE.Mesh(packRingGeo, ringMat);
+  ring.rotation.x = Math.PI / 2;
+  group.add(crystal, ring);
+  return { group, materials: [mat, ringMat] };
+}
+
 export function createCoins(scene) {
   const coins = [];
   let spawnTimer = 0;
@@ -59,19 +75,25 @@ export function createCoins(scene) {
   function spawn(playerZ, isClear) {
     for (let tries = 0; tries < 15; tries++) {
       const z = playerZ - rand(COINS.spawnAheadMin, COINS.spawnAheadMax);
-      // Stay on the course (before the far shore) and inside the water, away from the shore.
-      if (z < WATER_BOUNDS.minZ + 5 || z < -LAKE.length - 10) return;
+      // Stay on the course (before the far shore and the finish portal), away from the shore.
+      if (z < getWaterBounds().minZ + 5 || z < getLevel().finishZ - 10) return;
       const edges = getLakeEdges(z);
       const x = rand(edges.minX + 3, edges.maxX - 3);
       if (!isClear(x, z, COINS.obstacleClearance)) continue;
 
-      const golden = Math.random() < COINS.goldenChance;
+      // What kind of pickup? Mostly coins, sometimes a Golden Lure or a Zap Pack.
+      const roll = Math.random();
+      const kind = roll < COINS.goldenChance ? 'golden' : roll < COINS.goldenChance + COINS.zapPackChance ? 'zapPack' : 'coin';
+      const golden = kind === 'golden';
       // Some coins float high in the sky, where only a flying bobber can reach them.
-      const airHeight = Math.random() < COINS.airChance ? rand(COINS.airMinHeight, COINS.airMaxHeight) : 0;
-      const model = golden ? makeGoldenLureModel() : makeCoinModel();
+      // Over a gap between space lakes there's no water, so those coins always float,
+      // a little lower: a trail to grab while flying across.
+      let airHeight = Math.random() < COINS.airChance ? rand(COINS.airMinHeight, COINS.airMaxHeight) : 0;
+      if (!isOverLake(z, 2)) airHeight = rand(3, 5.5);
+      const model = kind === 'golden' ? makeGoldenLureModel() : kind === 'zapPack' ? makeZapPackModel() : makeCoinModel();
       model.group.position.set(x, 0, z);
       scene.add(model.group);
-      coins.push({ ...model, x, z, golden, airHeight, age: 0, spin: Math.random() * Math.PI * 2 });
+      coins.push({ ...model, x, z, kind, golden, airHeight, age: 0, spin: Math.random() * Math.PI * 2 });
       return;
     }
   }
@@ -120,7 +142,7 @@ export function createCoins(scene) {
       // Coins far behind the player are removed too, since they'd never be reached.
       const dist = Math.hypot(c.x - bobber.position.x, (y - bobber.mesh.position.y) * 0.7, c.z - bobber.position.z);
       if (canCollect && dist < COINS.pickupRadius + bobber.radius) {
-        picked.push({ golden: c.golden, x: c.x, y, z: c.z });
+        picked.push({ kind: c.kind, golden: c.golden, x: c.x, y, z: c.z });
         remove(i);
       } else if (c.z > bobber.position.z + 40) {
         remove(i);

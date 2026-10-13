@@ -17,6 +17,8 @@ let ctx = null;
 let master = null;     // the main volume knob: every sound goes through it (mute sets it to 0)
 let muted = false;
 let ambientOut = null; // volume knob for all the lake sounds
+let ambientTheme = 'lake'; // 'lake' = water and frogs, 'space' = a soft cosmic hum
+let spaceHum = null;     // the hum's volume knob (made the first time it's needed)
 let noise = null;      // a couple of seconds of random hiss, reused for splashy sounds
 
 function unlock() {
@@ -34,6 +36,9 @@ function unlock() {
 }
 window.addEventListener('pointerdown', unlock);
 window.addEventListener('keydown', unlock);
+// iPhones and iPads only allow sound to start from a finished tap, so listen for that too.
+window.addEventListener('touchend', unlock);
+window.addEventListener('click', unlock);
 
 // Mute / unmute everything (the lake sounds keep running silently underneath).
 export function setMuted(value) {
@@ -59,7 +64,7 @@ function makeNoise(seconds) {
 // in between. Skips playing while the browser tab is hidden.
 function repeatRandomly(playSound, minWait, maxWait) {
   function next() {
-    if (ctx.state === 'running' && !document.hidden) playSound();
+    if (ctx.state === 'running' && !document.hidden && ambientTheme === 'lake') playSound();
     setTimeout(next, rand(minWait, maxWait) * 1000);
   }
   setTimeout(next, rand(minWait, maxWait) * 1000);
@@ -187,6 +192,40 @@ function startLakeSounds() {
   // (Birds and frogs are started by wildlife.js, so they match what you see.)
   repeatRandomly(playLap, 1.2, 3.5);
   repeatRandomly(playBloop, 1.5, 5);
+  setAmbientTheme(ambientTheme);
+}
+
+// A deep, slowly shimmering hum for space: two low notes slightly out of tune with
+// each other (that makes a gentle "wah-wah" beat), softened by a filter.
+function startSpaceHum() {
+  spaceHum = ctx.createGain();
+  spaceHum.gain.value = 0;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 400;
+  // A very slow oscillator moves the filter up and down, so the hum shimmers.
+  const lfo = ctx.createOscillator();
+  lfo.frequency.value = 0.08;
+  const lfoDepth = ctx.createGain();
+  lfoDepth.gain.value = 250;
+  lfo.connect(lfoDepth).connect(filter.frequency);
+  lfo.start();
+  for (const freq of [55, 55.7, 110.3]) {
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.value = freq;
+    osc.connect(filter);
+    osc.start();
+  }
+  filter.connect(spaceHum).connect(ambientOut);
+}
+
+// Switch the background sounds to match the level: 'lake' or 'space'.
+export function setAmbientTheme(theme) {
+  ambientTheme = theme;
+  if (!ctx || !ambientOut) return; // sound hasn't started yet; it'll use this theme when it does
+  if (theme === 'space' && !spaceHum) startSpaceHum();
+  if (spaceHum) spaceHum.gain.setTargetAtTime(theme === 'space' ? 0.08 : 0, ctx.currentTime, 0.5);
 }
 
 // Plays one note.
@@ -336,4 +375,44 @@ export function playPoof() {
   src.start(t, 0, 0.35);
   tone(500, 0.05, 0.2, 'sine', 0.15);
   tone(900, 0.12, 0.25, 'sine', 0.12);
+}
+
+// Falling into space: a whistle sliding down, like a cartoon fall.
+export function playFall() {
+  if (!ctx || ctx.state !== 'running') return;
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(1200, t);
+  osc.frequency.exponentialRampToValueAtTime(150, t + 1.0);
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.15 * AUDIO.effectsVolume + 0.0001, t + 0.05);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+  osc.connect(gain).connect(master);
+  osc.start(t);
+  osc.stop(t + 1.2);
+}
+
+// Warping through the portal: a sweep rising up and up, with a sparkly shimmer.
+export function playWarp() {
+  if (!ctx || ctx.state !== 'running') return;
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(200, t);
+  osc.frequency.exponentialRampToValueAtTime(1800, t + 0.9);
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.18 * AUDIO.effectsVolume + 0.0001, t + 0.1);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.0);
+  osc.connect(gain).connect(master);
+  osc.start(t);
+  osc.stop(t + 1.1);
+  [1568, 2093, 2637, 3136].forEach((f, i) => tone(f, 0.4 + i * 0.08, 0.3, 'sine', 0.08));
+}
+
+// Picking up a Zap Pack: three quick rising electric blips.
+export function playReload() {
+  [660, 990, 1480].forEach((f, i) => tone(f, i * 0.07, 0.15, 'square', 0.06));
 }

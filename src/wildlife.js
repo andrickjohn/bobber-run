@@ -5,8 +5,8 @@
 // (and from the same side), so what you hear matches what you see.
 
 import * as THREE from 'three';
-import { LAKE, WILDLIFE, COLORS } from './config.js';
-import { getLakeEdges, getTerrainHeight } from './world.js';
+import { WILDLIFE, COLORS } from './config.js';
+import { getLakeEdges, getTerrainHeight, getLevel } from './world.js';
 import { playFrog, playBird } from './audio.js';
 
 const rand = THREE.MathUtils.randFloat;
@@ -96,7 +96,7 @@ function makeBirdModel() {
 export function createWildlife(scene) {
   // ----- Frogs: placed along both beaches for the whole lake -----
   const frogs = [];
-  for (let z = -10; z > -LAKE.length - 20; z -= WILDLIFE.frogSpacing) {
+  for (let z = -10; z > getLevel().finishZ - 20; z -= WILDLIFE.frogSpacing) {
     for (const side of [-1, 1]) {
       const fz = z + rand(-8, 8);
       const spot = beachSpot(fz, side);
@@ -201,5 +201,16 @@ export function createWildlife(scene) {
     }
   }
 
-  return { update };
+  // Remove all frogs and birds (when switching to another level).
+  function dispose() {
+    for (const f of frogs) {
+      scene.remove(f.frog);
+      f.frog.traverse((o) => o.geometry && o.geometry.dispose());
+    }
+    for (const b of birds) scene.remove(b.bird);
+    frogs.length = 0;
+    birds.length = 0;
+  }
+
+  return { update, dispose };
 }

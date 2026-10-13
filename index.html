@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#0b4f5c" />
     <title>Bobber Run</title>
     <style>
       /* Make the 3D canvas fill the whole window with no scrollbars */
@@ -10,6 +13,14 @@
         margin: 0;
         height: 100%;
         overflow: hidden;
+        /* Touchscreens: no scrolling, pinch-zoom, pull-to-refresh, text selecting or
+           long-press menus while playing. The game handles every touch itself. */
+        touch-action: none;
+        overscroll-behavior: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
         background: #9fd4f0;
         font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       }
@@ -32,6 +43,7 @@
         box-sizing: border-box; padding: 24px 28px; border-radius: 20px; text-align: center;
         background: rgba(255, 255, 255, 0.94); color: #0b4f5c;
         box-shadow: 0 10px 40px rgba(0, 40, 50, 0.3);
+        touch-action: pan-y; /* menus can still be scrolled with a finger */
       }
       .menu h1 { margin: 0 0 10px; font-size: 40px; color: #ff7a1a; }
       .menu h3 { margin: 18px 0 6px; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; }
@@ -123,6 +135,7 @@
       .points-pop.negative { color: #ff8a80; }
       @keyframes floatUp { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-30px); opacity: 0; } }
       .hud-sep { opacity: 0.6; margin: 0 4px; }
+      .hud-short { display: none; } /* phones show a 🚩 instead of the long label */
       .progress {
         position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
         width: min(520px, 70vw); display: flex; align-items: center; gap: 8px; pointer-events: none;
@@ -152,6 +165,77 @@
       .zap-dot { width: 10px; height: 10px; border-radius: 50%; background: #7df9ff; box-shadow: 0 0 6px #00b8d4; }
       .zap-dot.empty { background: rgba(255,255,255,0.35); box-shadow: none; }
       body.title-mode .energy, body.title-mode .ammo { display: none; }
+      .level-picker { margin-top: 12px; font-size: 15px; }
+      .level-picker .choices { margin-top: 6px; }
+      .flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity 0.6s; z-index: 10; }
+      .flash.on { opacity: 1; }
+      /* ----- Touchscreen Fly / Zap buttons (bottom-right, thumb-sized) ----- */
+      .touch-controls { display: none; }
+      body.touch .touch-controls {
+        display: flex; position: fixed; gap: 14px; align-items: flex-end;
+        right: calc(16px + env(safe-area-inset-right)); bottom: calc(46px + env(safe-area-inset-bottom));
+      }
+      body.title-mode .touch-controls { display: none; }
+      .touch-btn {
+        width: 84px; height: 84px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.9);
+        font: inherit; font-size: 28px; line-height: 1; color: #fff; cursor: pointer;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.3); touch-action: none;
+      }
+      .touch-btn span { font-size: 13px; font-weight: 800; letter-spacing: 1px; }
+      .fly-btn { background: rgba(255, 122, 26, 0.85); width: 96px; height: 96px; }
+      .zap-btn { background: rgba(0, 184, 212, 0.8); }
+      .touch-btn.down { transform: scale(0.92); filter: brightness(1.2); }
+      /* With touch buttons in the corner, move the mute button to the bottom-left. */
+      body.touch .mute-button { right: auto; left: calc(12px + env(safe-area-inset-left)); }
+
+      /* ----- Small screens (phones): a compact HUD so nothing overlaps ----- */
+      @media (max-width: 720px) {
+        .title { font-size: 20px; top: 8px; left: 10px; }
+        .title .byline { font-size: 11px; }
+        .score { top: 44px; left: 10px; font-size: 20px; }
+        .score-label { font-size: 12px; }
+        .top-buttons { top: 8px; right: 8px; gap: 6px; }
+        .hud-button { font-size: 15px; padding: 7px 11px; }
+        .hud-button .label { display: none; }
+        .lives { top: 48px; right: 10px; }
+        .life { width: 16px; height: 16px; }
+        .energy { top: 70px; right: 10px; }
+        .energy-track { width: 64px; }
+        .ammo { top: 88px; right: 10px; }
+        .zap-dot { width: 8px; height: 8px; }
+        .hud { top: 104px; font-size: 14px; padding: 4px 12px; white-space: nowrap; }
+        .hud-long { display: none; }
+        .hud-short { display: inline; }
+        .progress { bottom: auto; top: 136px; width: 60vw; }
+        .toast { top: 160px; font-size: 14px; max-width: 80vw; text-align: center; }
+        .mute-button { font-size: 12px; padding: 5px 9px; }
+      }
+      /* Phone held sideways: very short screen. Smaller touch buttons, HUD back on top. */
+      @media (max-height: 500px) {
+        .menu { padding: 10px 18px; }
+        .big-title { font-size: 30px !important; }
+        .big-byline { font-size: 13px; margin-bottom: 4px; }
+        .howto { font-size: 13px !important; }
+        .menu-buttons { margin-top: 8px; }
+        .level-picker { margin-top: 6px; }
+        .difficulty-now { margin-top: 6px; font-size: 14px; }
+        .menu h3 { margin: 6px 0 2px; font-size: 12px; }
+        .best { padding: 2px 10px; }
+        .best b { font-size: 16px; }
+        .title { font-size: 20px; top: 8px; left: 10px; }
+        .title .byline { font-size: 11px; }
+        .score { top: 42px; left: 10px; font-size: 20px; }
+        .score-label { font-size: 12px; }
+        .hud { font-size: 14px; padding: 4px 12px; }
+        .touch-btn { width: 70px; height: 70px; font-size: 22px; }
+        .fly-btn { width: 80px; height: 80px; }
+        body.touch .touch-controls { bottom: calc(14px + env(safe-area-inset-bottom)); }
+        .hud { top: 8px; }
+        .progress { top: auto; bottom: 10px; }
+        body.touch .progress { width: 42vw; } /* leave room for the Fly/Zap buttons */
+        .toast { top: 44px; }
+      }
       .hidden { display: none; }
     </style>
   </head>

@@ -9,6 +9,7 @@
 
 import { formatTime } from './game.js';
 import { DIFFICULTY, SETTINGS_LIMITS } from './config.js';
+import { isTouchDevice } from './device.js';
 
 export function createUI() {
   // ----- Announcing actions to main.js -----
@@ -47,10 +48,15 @@ export function createUI() {
   const hud = document.createElement('div');
   hud.className = 'hud';
   hud.innerHTML = `
-    <div class="hud-checkpoints">Checkpoints <span id="cp-count">0 / 0</span>
+    <div class="hud-checkpoints"><span class="hud-long"><span id="level-name"></span> <span class="hud-sep">·</span> Checkpoints</span><span class="hud-short">🚩</span> <span id="cp-count">0 / 0</span>
       <span class="hud-sep">·</span> ⏱ <span id="timer">0:00.0</span></div>
     <div class="hud-warning hidden" id="cp-warning"></div>`;
   document.body.appendChild(hud);
+
+  // A full-screen white layer used for the portal "warp" flash.
+  const flashOverlay = document.createElement('div');
+  flashOverlay.className = 'flash';
+  document.body.appendChild(flashOverlay);
 
   // The menu panel in the middle of the screen. Its contents change for each screen.
   const menu = document.createElement('div');
@@ -67,11 +73,11 @@ export function createUI() {
   buttons.className = 'top-buttons';
   const pauseButton = document.createElement('button');
   pauseButton.className = 'hud-button';
-  pauseButton.textContent = '⏸ Pause';
+  pauseButton.innerHTML = '⏸<span class="label"> Pause</span>';
   pauseButton.title = 'Pause (P or Esc)';
   const restartButton = document.createElement('button');
   restartButton.className = 'hud-button';
-  restartButton.textContent = '↻ Restart';
+  restartButton.innerHTML = '↻<span class="label"> Restart</span>';
   restartButton.title = 'Restart (R)';
   buttons.append(pauseButton, restartButton);
   document.body.appendChild(buttons);
@@ -108,6 +114,45 @@ export function createUI() {
     muteButton.blur();
   });
 
+  // ----- Touchscreen buttons: FLY (hold) and ZAP (hold to keep firing) -----
+  // They only show on touch devices (the "touch" class on the page turns them on).
+  if (isTouchDevice) document.body.classList.add('touch');
+  // A laptop with a touchscreen: show them the first time someone touches the screen.
+  window.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'touch') document.body.classList.add('touch');
+  });
+  const touchControls = document.createElement('div');
+  touchControls.className = 'touch-controls';
+  touchControls.innerHTML = `
+    <button class="touch-btn zap-btn" aria-label="Zap">⚡<span>ZAP</span></button>
+    <button class="touch-btn fly-btn" aria-label="Fly">🪽<span>FLY</span></button>`;
+  document.body.appendChild(touchControls);
+  // Each button announces when it's pressed and let go. "Pointer capture" keeps
+  // listening to that finger even if it slides off the button a little.
+  function holdButton(button, name) {
+    button.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      button.classList.add('down');
+      emit(name + 'Down');
+      try {
+        button.setPointerCapture(e.pointerId);
+      } catch (err) {
+        // Some browsers can't capture this pointer; the button still works without it.
+      }
+    });
+    const release = () => {
+      button.classList.remove('down');
+      emit(name + 'Up');
+    };
+    button.addEventListener('pointerup', release);
+    button.addEventListener('pointercancel', release);
+    button.addEventListener('lostpointercapture', release);
+  }
+  holdButton(touchControls.querySelector('.fly-btn'), 'fly');
+  holdButton(touchControls.querySelector('.zap-btn'), 'zap');
+  // No long-press menus on the game.
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
+
   pauseButton.addEventListener('click', () => {
     emit('pause');
     pauseButton.blur(); // so pressing keys later doesn't "click" it again
@@ -137,16 +182,26 @@ export function createUI() {
       document.body.classList.toggle('title-mode', on);
     },
 
-    showTitle(best, settings) {
+    // levels = the LEVELS list from config.js, for the "jump to a level" buttons.
+    showTitle(best, settings, levels) {
+      const levelButtons = levels
+        .map((lvl, i) => `<button class="choice" data-action="playLevel" data-value="${i}">${i + 1}. ${lvl.name}</button>`)
+        .join('');
       showMenu(
         `<h1 class="big-title">Bobber Run</h1>
         <div class="big-byline">by Eliott</div>
-        <p class="howto">Steer with the mouse (or arrow keys). Hold <b>Space</b> (or the mouse
-          button) to fly, and <b>F</b> (or right-click) to zap! Pass all 4 checkpoints, dodge the fish, grab coins and reach the finish.</p>
+        <p class="howto">${
+          document.body.classList.contains('touch')
+            ? 'Drag your finger to steer. Hold <b>FLY</b> to fly and tap <b>ZAP</b> to zap!'
+            : 'Steer with the mouse (or arrow keys). Hold <b>Space</b> (or the mouse button) to fly, and <b>F</b> (or right-click) to zap!'
+        } Pass all 4 checkpoints, dodge the fish, grab coins and fly into the portal to reach the next world.</p>
+        ${document.body.classList.contains('touch') && window.innerHeight > window.innerWidth
+          ? '<p class="note">📱 Turn your phone sideways for a bigger view</p>' : ''}
         <div class="menu-buttons">
           <button class="primary" data-action="play">▶ Play</button>
           <button data-action="settings">⚙ Settings</button>
         </div>
+        <div class="level-picker"><span>Or start at:</span><div class="choices">${levelButtons}</div></div>
         <div class="difficulty-now">Difficulty: <b>${DIFFICULTY[settings.difficulty].label}</b></div>
         <h3>Best scores</h3>
         <div class="bests">${bestScoresHTML(best)}</div>`,
@@ -204,11 +259,12 @@ export function createUI() {
       );
     },
 
-    showGameOver(score, passed, total) {
+    showGameOver(score, passed, total, levelName, isNewBest) {
       showMenu(
         `<h1>Game Over</h1>
+        ${isNewBest ? '<div class="new-best">★ New best! ★</div>' : ''}
         <p class="big-number">${score} <span>points</span></p>
-        <p>Checkpoints reached: <b>${passed} / ${total}</b></p>
+        <p>Made it to <b>${levelName}</b>, checkpoint <b>${passed} / ${total}</b></p>
         <div class="menu-buttons">
           <button class="primary" data-action="play">↻ Play Again</button>
           <button data-action="quit">⌂ Title</button>
@@ -216,11 +272,25 @@ export function createUI() {
       );
     },
 
-    showVictory(breakdown, isNewBest, best) {
+    // Through a portal with more levels to go.
+    showLevelComplete(breakdown, runTotal, levelName, nextName) {
       showMenu(
-        `<h1>You win!</h1>
-        ${isNewBest ? '<div class="new-best">★ New best! ★</div>' : `<div class="note">Best: ${best}</div>`}
+        `<h1>${levelName} complete!</h1>
         ${this.resultsTable(breakdown)}
+        <p>Run total so far: <b>${runTotal}</b></p>
+        <div class="menu-buttons">
+          <button class="primary" data-action="nextLevel">🌀 Enter the portal to ${nextName}</button>
+        </div>`
+      );
+    },
+
+    // Through the last portal: the whole run is done!
+    showVictory(breakdown, runTotal, isNewBest, best) {
+      showMenu(
+        `<h1>You beat every world!</h1>
+        ${this.resultsTable(breakdown)}
+        <p class="big-number">${runTotal} <span>points total</span></p>
+        ${isNewBest ? '<div class="new-best">★ New best! ★</div>' : `<div class="note">Best: ${best}</div>`}
         <div class="menu-buttons">
           <button class="primary" data-action="play">↻ Play Again</button>
           <button data-action="quit">⌂ Title</button>
@@ -232,13 +302,27 @@ export function createUI() {
       menu.classList.add('hidden');
     },
 
+    // The warp: the screen fades to white, middle() runs (loading the next level),
+    // then it fades back in.
+    flash(middle) {
+      flashOverlay.classList.add('on');
+      setTimeout(() => {
+        middle();
+        flashOverlay.classList.remove('on');
+      }, 600);
+    },
+
+    setLevelName(name) {
+      document.getElementById('level-name').textContent = name;
+    },
+
     setMuted(muted) {
       muteButton.textContent = muted ? '🔇 Sound off' : '🔊 Sound on';
     },
 
     // The pause button's label switches between Pause and Resume.
     setPaused(paused) {
-      pauseButton.textContent = paused ? '▶ Resume' : '⏸ Pause';
+      pauseButton.innerHTML = paused ? '▶<span class="label"> Resume</span>' : '⏸<span class="label"> Pause</span>';
     },
 
     // Show "left" full bobbers and the rest as faded ones, out of "max".
@@ -274,7 +358,7 @@ export function createUI() {
       fill.classList.toggle('low', low);
     },
     setAmmo(left, max) {
-      if (left === shownAmmo) return; // only redraw when it changes
+      if (left === shownAmmo && max === ammo.childElementCount - 1) return; // only redraw when it changes
       shownAmmo = left;
       ammo.innerHTML = '<span class="ammo-label">🎯</span>' +
         Array.from({ length: max }, (_, i) => `<span class="zap-dot ${i < left ? '' : 'empty'}"></span>`).join('');

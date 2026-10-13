@@ -7,8 +7,11 @@
 //   'title'    – on the title screen (the lake is just scenery)
 //   'playing'  – racing down the lake
 //   'paused'   – everything frozen
-//   'won'      – crossed the finish line
+//   'won'      – flew through a level's finish portal (score screen before the next level)
 //   'gameover' – ran out of lives
+//
+// A "run" goes through every level in order. Lives carry over from level to level,
+// and each level's score is added to the run's total.
 
 import { GAME, SCORING, BOBBER } from './config.js';
 
@@ -26,12 +29,21 @@ export function createGame() {
     zapCount: 0,
     coinCount: 0,
     goldenCount: 0,
+    levelIndex: 0,      // which level we're on (0 = the first)
+    runTotal: 0,        // points from levels already finished in this run
 
-    // Start a fresh run.
-    reset() {
-      game.state = 'playing';
+    // Start a fresh run from the first level (or from startLevel for the level picker).
+    newRun(startLevel = 0) {
       game.lives = GAME.lives;
       game.maxLives = GAME.lives;
+      game.levelIndex = startLevel;
+      game.runTotal = 0;
+      game.reset();
+    },
+
+    // Start the current level: score and timer back to zero, lives stay the same.
+    reset() {
+      game.state = 'playing';
       game.invincibleTimer = 0;
       game.respawnTimer = 0;
       game.time = 0;
@@ -75,7 +87,12 @@ export function createGame() {
       return Math.max(0, p.coins + p.goldenLures + p.checkpoints + p.zaps + p.penalties);
     },
 
-    // Works out the final score at the finish line, with every part listed.
+    // Total for the whole run so far, counting the level we're on (used for Game Over).
+    runScoreSoFar() {
+      return game.runTotal + Math.round(game.currentScore() * SCORING.multiplier[SCORING.difficulty]);
+    },
+
+    // Works out this level's score at the finish portal, with every part listed.
     finalScore() {
       const seconds = game.time;
       const timeBonus = Math.round(Math.max(0, SCORING.timeBonusSeconds - seconds) * SCORING.timeBonusPerSecond);

@@ -24,8 +24,8 @@
 // only hit a bobber that's up in the air too.
 
 import * as THREE from 'three';
-import { OBSTACLES, LAKE, COLORS } from './config.js';
-import { getWaveHeight, getLakeEdges } from './world.js';
+import { OBSTACLES, COLORS } from './config.js';
+import { getWaveHeight, getLakeEdges, getLevel, isOverLake } from './world.js';
 
 const rand = THREE.MathUtils.randFloat;
 
@@ -587,28 +587,34 @@ export function createObstacles(scene) {
     // Split the lake (between the start and finish safe zones) into equal slices,
     // one obstacle per slice, so they're spread out from start to finish.
     const zStart = -OBSTACLES.startSafeZone;
-    const zEnd = -LAKE.length + OBSTACLES.finishSafeZone;
+    const zEnd = getLevel().finishZ + OBSTACLES.finishSafeZone;
     const slice = (zEnd - zStart) / count;
+
+    // Is (x, z) a good spot? On a lake (not in a gap, not too near a lake's end)
+    // and far enough from every checkpoint.
+    function goodSpot(type, x, z) {
+      if (!isOverLake(z, SIZE[type] + 6)) return false;
+      const safe = OBSTACLES.checkpointSafeRadius + SIZE[type];
+      return !gateCenters.some((g) => Math.hypot(g.x - x, g.z - z) < safe);
+    }
 
     types.forEach((type, i) => {
       const margin = SHORE_MARGIN[type];
-      let x = 0;
-      let z = zStart + slice * (i + 0.5);
-      // Try random spots in this slice until one is far enough from every checkpoint.
-      for (let tries = 0; tries < 25; tries++) {
-        z = zStart + slice * (i + rand(0.1, 0.9));
+      // Try random spots in this obstacle's slice first. If the slice is mostly a gap
+      // between space lakes, try anywhere on the course instead.
+      for (let tries = 0; tries < 60; tries++) {
+        const z = tries < 25 ? zStart + slice * (i + rand(0.1, 0.9)) : rand(zEnd, zStart);
         const e = getLakeEdges(z);
-        x = rand(e.minX + margin, e.maxX - margin);
-        const safe = OBSTACLES.checkpointSafeRadius + SIZE[type];
-        const tooClose = gateCenters.some((g) => Math.hypot(g.x - x, g.z - z) < safe);
-        if (!tooClose) break;
+        const x = rand(e.minX + margin, e.maxX - margin);
+        if (!goodSpot(type, x, z)) continue;
+        add(MAKERS[type](x, z));
+        // Some whirlpools have a pike circling in the middle, waiting...
+        if (type === 'whirlpool' && Math.random() < OBSTACLES.whirlpool.pikeChance) {
+          add(makePike(x, z, { x, z }));
+        }
+        return;
       }
-      add(MAKERS[type](x, z));
-
-      // Some whirlpools have a pike circling in the middle, waiting...
-      if (type === 'whirlpool' && Math.random() < OBSTACLES.whirlpool.pikeChance) {
-        add(makePike(x, z, { x, z }));
-      }
+      // (No good spot found: this obstacle is simply skipped.)
     });
   }
 
