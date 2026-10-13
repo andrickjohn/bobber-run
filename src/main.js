@@ -19,7 +19,7 @@ import { createCoins } from './coins.js';
 import { createShooter } from './shooting.js';
 import { createUI } from './ui.js';
 import { loadSettings, saveSettings, applySettings, loadBestScores, recordScore } from './settings.js';
-import { playChime, playFanfare, playBuzz, playSplash, playGameOver, playDing, playGoldenDing, setMuted, setThrust, playPlop, playZap, playPoof, playFall, playWarp, setAmbientTheme, playReload } from './audio.js';
+import { playChime, playFanfare, playBuzz, playSplash, playGameOver, playDing, playGoldenDing, setMuted, setThrust, playPlop, playZap, playPoof, playFall, playWarp, setAmbientTheme, playReload, setPortalHum } from './audio.js';
 
 const canvas = document.getElementById('game');
 const { renderer, scene, camera, followWithSun, applyTheme } = createScene(canvas);
@@ -474,6 +474,9 @@ function loop(now = performance.now()) {
   step(Math.max(0, dt));
   // Flying whoosh: on while flying during a race, off otherwise (including when paused).
   setThrust(game.state === 'playing' && bobber.flight.flying ? 1 : 0);
+  // Portal hum: fades in over the last 80 units before the portal.
+  const toPortal = Math.abs(bobber.position.z - getLevel().finishZ);
+  setPortalHum(game.state === 'playing' ? Math.max(0, 1 - toPortal / 80) : 0);
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
 }

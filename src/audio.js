@@ -416,3 +416,35 @@ export function playWarp() {
 export function playReload() {
   [660, 990, 1480].forEach((f, i) => tone(f, i * 0.07, 0.15, 'square', 0.06));
 }
+
+// ----- Portal hum -----
+// A shimmering chord that fades in as you get close to the portal.
+let portalGain = null;
+function startPortalHum() {
+  portalGain = ctx.createGain();
+  portalGain.gain.value = 0;
+  // A wobble on the volume makes it shimmer.
+  const tremolo = ctx.createOscillator();
+  tremolo.frequency.value = 5;
+  const tremoloDepth = ctx.createGain();
+  tremoloDepth.gain.value = 0.3;
+  const shimmer = ctx.createGain();
+  shimmer.gain.value = 0.7;
+  tremolo.connect(tremoloDepth).connect(shimmer.gain);
+  tremolo.start();
+  for (const freq of [261.6, 392, 523.3]) { // C, G and high C
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    osc.connect(shimmer);
+    osc.start();
+  }
+  shimmer.connect(portalGain).connect(master);
+}
+
+// closeness: 0 = far away (silent), 1 = right at the portal.
+export function setPortalHum(closeness) {
+  if (!ctx || ctx.state !== 'running') return;
+  if (!portalGain) startPortalHum();
+  portalGain.gain.setTargetAtTime(closeness * 0.06 * AUDIO.effectsVolume, ctx.currentTime, 0.2);
+}

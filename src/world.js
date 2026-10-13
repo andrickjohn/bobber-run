@@ -139,6 +139,12 @@ export function getTerrainHeight(x, z, onlyLake = null) {
 // (Over a gap between space lakes there is no water, so the height is just 0.)
 export function getWaveHeight(x, z, t) {
   if (!isOverLake(z)) return 0;
+  return waveFormula(x, z, t);
+}
+
+// The wave math itself, without the gap check. The water meshes use this directly,
+// because they already know which of their points are lake (it's faster).
+function waveFormula(x, z, t) {
   const k = (Math.PI * 2) / LAKE.waveLength; // turns distance into an angle
   const s = LAKE.waveSpeed;
   const w1 = Math.sin(z * k + t * s);
@@ -261,18 +267,16 @@ function createWater(theme, lake) {
   });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
+  for (let i = 0; i < pos.count; i++) if (!isLake[i]) pos.setY(i, -30);
 
   // Animate the waves: move every point to the wave height (plus its own chop).
   function update(time) {
     for (let i = 0; i < pos.count; i++) {
-      if (!isLake[i]) {
-        pos.setY(i, -30);
-        continue;
-      }
+      if (!isLake[i]) continue; // tucked away under the island (set once, below)
       const x = pos.getX(i);
       const z = pos.getZ(i);
       const chop = LAKE.waveRandomness * chopAmount[i] * Math.sin(time * 2.2 + chopPhase[i]);
-      pos.setY(i, getWaveHeight(x, z, time) + chop);
+      pos.setY(i, waveFormula(x, z, time) + chop);
     }
     pos.needsUpdate = true;
   }

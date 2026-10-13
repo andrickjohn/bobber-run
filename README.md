@@ -2,22 +2,40 @@
 
 *A fishing-themed 3D ball game by Eliott, built with [Claude Code](https://claude.com/claude-code) for a 10th grade tech project.*
 
-Steer a fishing bobber across a lake, pass all 4 checkpoints, dodge fishing-themed
-obstacles, grab coins, and reach the finish buoy on the far shore.
+Steer a fishing bobber across a lake, pass all 4 checkpoints, dodge (or zap!) fishing-themed
+obstacles, grab coins, and fly into the swirling portal at the end. The portal warps you to
+the next world: **Space Lakes**, where lakes float on islands among the stars and you have to
+fly from one to the next.
+
+Plays on computers, tablets and phones.
 
 ## How to play
 
-| Control | What it does |
-|---|---|
-| **Mouse** | The bobber glides toward wherever you point on the water (no clicking needed) |
-| **Arrow keys / W A S D** | Steer with the keyboard instead |
-| **P** or **Esc** | Pause |
-| **R** | Restart |
-| **M** | Sound on/off |
+| Computer | Phone / tablet | What it does |
+|---|---|---|
+| **Mouse** (just move it) | **Drag your finger** | The bobber glides toward where you point |
+| **Arrow keys / W A S D** | | Steer with the keyboard instead |
+| Hold **Space** or the **left mouse button** | Hold **FLY** | Fly up, hover, then glide down when you let go |
+| **F** or **right-click** | Tap **ZAP** | Fire a zap at what you're aiming at |
+| **P** or **Esc** | ⏸ button | Pause |
+| **R** | ↻ button | Restart the level |
+| **M** | Sound button | Sound on/off |
 
-- Go **between** the two orange buoys of each checkpoint, in order (1 → 4). Going around one costs points and you'll have to go back.
+- Go **between** the two buoys of each checkpoint, in order (1 → 4). Going around one costs points and you'll have to go back.
 - Getting hit by a fish, turtle, lure or log costs a life. You go back to your last checkpoint and blink for a moment (safe).
-- **Lily pads** slow you down and **whirlpools** (Hard only) pull you in, but neither costs a life.
+- **Flying** uses energy (the ⚡ bar), which recharges while you float on the water. Fly over obstacles, grab coins floating in the sky, and cross the gaps between space lakes. Fall into a gap and you lose a life!
+- **Zaps** (the 🎯 dots) knock obstacles out for points. They reload slowly; grab **⚡ Zap Packs** (+3) and pass checkpoints (+2) to earn more.
+- **Lily pads** slow you down and **whirlpools** (Hard only) pull you in, but neither costs a life (and you can fly right over them).
+
+### Worlds
+
+| World | What's special |
+|---|---|
+| 1. Home Lake | A curvy lake with beaches, trees, frogs and birds, starting from a wooden dock |
+| 2. Space Lakes | Four lakes on floating islands among the stars. Fly across the gaps between them |
+
+Your lives and score carry from one world to the next. You can also jump straight to a
+world from the title screen.
 
 ### Obstacles
 
@@ -42,9 +60,10 @@ obstacles, grab coins, and reach the finish buoy on the far shore.
 | Finish | +500 |
 | Time bonus | max(0, 300 − seconds) × 2 |
 | Each life left at the finish | +100 |
+| Zapping an obstacle | +25 |
 
-The total is multiplied by the difficulty: Easy ×1, Normal ×1.5, Hard ×2.
-Your best score for each difficulty is saved in the browser.
+Each world's score is multiplied by the difficulty (Easy ×1, Normal ×1.5, Hard ×2) and added
+to your run total. Your best run for each difficulty is saved in the browser.
 
 ### Settings
 
@@ -61,6 +80,9 @@ npm run dev
 ```
 
 Then open the link it prints (usually http://localhost:5173).
+
+To try it on a phone on the same Wi-Fi, run `npm run dev -- --host` and open the
+**Network** address it prints on the phone.
 
 To make the production version (what gets published):
 
@@ -81,19 +103,25 @@ Audio API.
 | `src/config.js` | **Every tunable number and color.** Change things here to tweak the game |
 | `src/main.js` | Starts the game, switches between screens, runs the main loop |
 | `src/scene.js` | Renderer, camera, lights, sky and fog |
-| `src/world.js` | Lake, waves, shoreline, dock, trees, start line and finish |
-| `src/bobber.js` | The player: model, mouse/keyboard steering, bobbing |
+| `src/world.js` | The scenery for each world: lakes, waves, islands, dock, trees, stars, portal |
+| `src/bobber.js` | The player: model, mouse/finger/keyboard steering, flying, bobbing |
+| `src/shooting.js` | The zapper: firing zaps and what they hit |
+| `src/device.js` | Detects phones/tablets (for touch buttons and lighter graphics) |
 | `src/checkpoints.js` | Checkpoint gates and progress tracking |
 | `src/obstacles.js` | Every obstacle type and how it moves |
-| `src/coins.js` | Coin spawning and pickup |
-| `src/game.js` | Lives, score, timer, game states, collisions |
+| `src/coins.js` | Coins, Golden Lures and Zap Packs |
+| `src/game.js` | Lives, score, timer, game states, runs through the worlds, collisions |
 | `src/ui.js` | HUD and menus (HTML/CSS on top of the 3D view) |
 | `src/settings.js` | Saving settings and best scores |
-| `src/audio.js` | Generated sound effects and lake sounds |
+| `src/audio.js` | Generated sound effects, lake sounds and the space hum |
 | `src/effects.js` | Splashes, sparkles, confetti and the wake trail |
 | `src/wildlife.js` | Frogs and birds on the shore |
 
 ## Built with Claude Code
 
 This game was built step by step with Claude Code, Anthropic's AI coding assistant, following
-the plan in `prompt.md`. Each phase was tested in the browser before moving on to the next.
+the plan in `prompt.md` (phases 1–9), then extended with flying, zapping, portals, Space Lakes
+and touch controls (phases 10–14). Each phase was tested in the browser before moving on.
+
+To add a new world, add an entry to `LEVELS` (and maybe a new look in `THEMES`) in
+`src/config.js`.
