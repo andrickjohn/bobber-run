@@ -53,6 +53,11 @@ export function createUI() {
     <div class="hud-warning hidden" id="cp-warning"></div>`;
   document.body.appendChild(hud);
 
+  // A blue, glowing-edges layer for hyperspace.
+  const warpTint = document.createElement('div');
+  warpTint.className = 'warp-tint';
+  document.body.appendChild(warpTint);
+
   // A full-screen white layer used for the portal "warp" flash.
   const flashOverlay = document.createElement('div');
   flashOverlay.className = 'flash';
@@ -278,8 +283,9 @@ export function createUI() {
         `<h1>${levelName} complete!</h1>
         ${this.resultsTable(breakdown)}
         <p>Run total so far: <b>${runTotal}</b></p>
+        <p class="warp-countdown">🌀 Warping to <b>${nextName}</b> in <b id="warp-seconds">5</b>…</p>
         <div class="menu-buttons">
-          <button class="primary" data-action="nextLevel">🌀 Enter the portal to ${nextName}</button>
+          <button class="primary" data-action="nextLevel">🚀 Warp now</button>
         </div>`
       );
     },
@@ -310,6 +316,22 @@ export function createUI() {
         middle();
         flashOverlay.classList.remove('on');
       }, 600);
+    },
+
+    // The seconds left before the automatic warp (on the level-complete screen).
+    setWarpCountdown(seconds) {
+      const el = document.getElementById('warp-seconds');
+      if (el) el.textContent = seconds;
+    },
+
+    // Hide the HUD during the hyperspace jump, so it looks like a movie scene.
+    setWarpMode(on) {
+      document.body.classList.toggle('warping', on);
+    },
+
+    // A blue glow over the whole screen during hyperspace (0 = none, 1 = strongest).
+    setWarpTint(amount) {
+      warpTint.style.opacity = amount;
     },
 
     setLevelName(name) {

@@ -102,12 +102,21 @@ export const PORTAL = {
   spinSpeed: 1.6,      // how fast the swirl spins
 };
 
+// The hyperspace jump between worlds
+export const HYPERSPACE = {
+  countdown: 5,        // seconds the score screen shows before warping automatically
+  diveTime: 1.6,       // seconds diving into the portal, speeding up
+  arriveTime: 1.4,     // seconds slowing down in the new world
+  fovBoost: 50,        // how much wider the view stretches at top speed (degrees)
+};
+
 // ---------------------------------------------------------------------------
 // Levels ("scenes"). Finish one and its portal takes you to the next.
 // Each level is made of one or more lakes, listed from the start (near) to the finish (far).
 //   start / end   – where the lake begins and ends along Z
 //   checkpointZ   – where the 4 gates go (null = spread evenly)
 //   bend / widthWiggle – how curvy the lake is
+//   width         – (optional) how wide the lakes are; LAKE.width if left out
 // Gaps between lakes have no water: you have to FLY across. Fall in and you lose a life!
 // ---------------------------------------------------------------------------
 export const LEVELS = [
@@ -124,15 +133,31 @@ export const LEVELS = [
     name: 'Space Lakes',
     theme: 'space',
     lakes: [
-      { start: 25, end: -95 },
-      { start: -122, end: -205 },
-      { start: -232, end: -315 },
-      { start: -342, end: -435 },
+      { start: 25, end: -90 },
+      { start: -130, end: -210 },
+      { start: -250, end: -320 },
+      { start: -360, end: -445 },
     ],
-    checkpointZ: [-55, -163, -273, -370],
-    finishZ: -405,
+    checkpointZ: [-55, -170, -285, -385],
+    finishZ: -420,
     bend: 6,
     widthWiggle: 8,
+  },
+  {
+    name: 'Lava Lagoon',
+    theme: 'lava',
+    lakes: [
+      { start: 25, end: -65 },
+      { start: -105, end: -165 },
+      { start: -205, end: -260 },
+      { start: -300, end: -355 },
+      { start: -395, end: -455 },
+    ],
+    checkpointZ: [-40, -135, -232, -328],
+    finishZ: -430,
+    width: 62,      // narrower pools, so steering matters more
+    bend: 14,
+    widthWiggle: 6,
   },
 ];
 
@@ -158,6 +183,7 @@ export const THEMES = {
     portalGlow: 0xffd180,
     wildlife: true,    // frogs and birds
     islands: false,    // the lake sits in hills, not floating in space
+    fallMessage: 'Splash!',
   },
   space: {
     sky: 0x05030f,
@@ -180,6 +206,34 @@ export const THEMES = {
     portalGlow: 0x7df9ff,
     wildlife: false,
     islands: true,     // each lake is a floating island with rock underneath
+    decor: 'space',    // stars, planets and drifting rocks
+    fallMessage: 'Lost in space!',
+  },
+  lava: {
+    sky: 0x1a0603,
+    fog: 0x3d1208,
+    fogNear: 70,
+    fogFar: 300,
+    sun: 0xffb27a,
+    sunIntensity: 1.7,
+    hemiSky: 0xff7a3a,
+    hemiGround: 0x220500,
+    hemiIntensity: 1.0,
+    water: 0x1f9e9a,   // cool blue-green pools (the only safe spots!)
+    wetSand: 0x3a2a24,
+    sand: 0x5e4c45,    // ash
+    grass: 0x2e2422,   // dark volcanic rock
+    grassDark: 0x1c1513,
+    rock: 0x2a1f1c,
+    crystals: [0xff5a1a, 0xffae00, 0xff2a00], // glowing hot rocks
+    portal: 0xff3d00,
+    portalGlow: 0xffd54f,
+    lava: 0xff4a00,    // the lava sea far below the islands
+    undersideGlow: 0x5a1400, // the islands' rocky bottoms glow red from the lava
+    wildlife: false,
+    islands: true,
+    decor: 'lava',     // lava sea, volcanoes and rising embers
+    fallMessage: 'Into the lava!',
   },
 };
 

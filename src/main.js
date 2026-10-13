@@ -6,7 +6,7 @@
 // (about 60 times a second).
 
 import * as THREE from 'three';
-import { CAMERA, BOBBER, OBSTACLES, EFFECTS, FLY, SHOOT, PORTAL, LEVELS } from './config.js';
+import { CAMERA, BOBBER, OBSTACLES, EFFECTS, FLY, SHOOT, PORTAL, LEVELS, HYPERSPACE } from './config.js';
 import { createScene, getChaseCameraPose } from './scene.js';
 import { createWorld, lakeCenterX, setLevel, getLevel, getTheme } from './world.js';
 import { createBobber } from './bobber.js';
@@ -17,9 +17,10 @@ import { createEffects } from './effects.js';
 import { createGame, bobberHitsAny, formatTime } from './game.js';
 import { createCoins } from './coins.js';
 import { createShooter } from './shooting.js';
+import { createHyperspace } from './hyperspace.js';
 import { createUI } from './ui.js';
 import { loadSettings, saveSettings, applySettings, loadBestScores, recordScore } from './settings.js';
-import { playChime, playFanfare, playBuzz, playSplash, playGameOver, playDing, playGoldenDing, setMuted, setThrust, playPlop, playZap, playPoof, playFall, playWarp, setAmbientTheme, playReload, setPortalHum } from './audio.js';
+import { playChime, playFanfare, playBuzz, playSplash, playGameOver, playDing, playGoldenDing, setMuted, setThrust, playPlop, playZap, playPoof, playFall, setAmbientTheme, playReload, setPortalHum, playHyperspace } from './audio.js';
 
 const canvas = document.getElementById('game');
 const { renderer, scene, camera, followWithSun, applyTheme } = createScene(canvas);
@@ -29,6 +30,7 @@ const obstacles = createObstacles(scene);
 const effects = createEffects(scene);
 const coins = createCoins(scene);
 const shooter = createShooter(scene, canvas);
+const hyperspace = createHyperspace();
 const game = createGame();
 const ui = createUI();
 
@@ -88,6 +90,7 @@ function setUpCourse() {
 }
 
 function goToTitle() {
+  clearInterval(countdownTimer);
   applySettings(settings);
   game.newRun(0);
   setUpCourse();
@@ -99,6 +102,7 @@ function goToTitle() {
 
 // Start a new run. levelIndex lets the title screen start straight at a later level.
 function startGame(levelIndex = 0) {
+  clearInterval(countdownTimer);
   applySettings(settings); // difficulty and obstacle count take effect here
   game.newRun(levelIndex);
   beginLevel();
@@ -118,20 +122,99 @@ function beginLevel() {
 
 // R / Restart: start this level over (with the lives you had when it began).
 function restartLevel() {
-  if (game.state === 'title') return;
+  if (game.state === 'title' || game.state === 'warping') return;
+  clearInterval(countdownTimer);
   game.lives = livesAtLevelStart;
   game.reset();
   beginLevel();
 }
 
-// After the level-complete screen: warp through the portal to the next level.
+// ---------------------------------------------------------------------------
+// The hyperspace jump to the next world
+// ---------------------------------------------------------------------------
+// 1. "dive":   the camera rushes into the portal, the view stretches wider and wider,
+//              star streaks speed past and the screen glows blue.
+// 2. Flash:    the screen goes white, and the next world is built behind it.
+// 3. "arrive": the streaks slow down and the view settles behind the bobber.
+let warp = null;          // the jump in progress (null when not warping)
+let countdownTimer = null;
+
+// The level-complete screen counts down, then warps by itself.
+function startWarpCountdown() {
+  let secondsLeft = HYPERSPACE.countdown;
+  ui.setWarpCountdown(secondsLeft);
+  clearInterval(countdownTimer);
+  countdownTimer = setInterval(() => {
+    secondsLeft--;
+    ui.setWarpCountdown(Math.max(0, secondsLeft));
+    if (secondsLeft <= 0) enterPortal();
+  }, 1000);
+}
+
 function enterPortal() {
-  playWarp();
-  ui.flash(() => {
-    game.levelIndex++;
-    game.reset(); // new score and timer for this level; lives carry over
-    beginLevel();
-  });
+  if (warp || game.state !== 'won') return;
+  clearInterval(countdownTimer);
+  ui.hideMenu();
+  ui.setWarpMode(true);
+  game.state = 'warping';
+  bobber.setVisible(false);
+  playHyperspace(HYPERSPACE.diveTime);
+  const fz = getLevel().finishZ;
+  const portal = new THREE.Vector3(lakeCenterX(fz), PORTAL.centerHeight, fz);
+  warp = {
+    phase: 'dive',
+    t: 0,
+    from: camera.position.clone(),                     // where the camera starts
+    to: portal.clone().add(new THREE.Vector3(0, 0, -8)), // just through the portal
+    lookAt: portal.clone().add(new THREE.Vector3(0, 0, -80)), // look straight through it
+    flashed: false,
+  };
+}
+
+function updateWarp(dt) {
+  warp.t += dt;
+  const baseFov = camera.userData.baseFov;
+  if (warp.phase === 'dive') {
+    const p = Math.min(1, warp.t / HYPERSPACE.diveTime);
+    const e = p * p * p; // "ease in": starts slow and ends REALLY fast
+    camera.position.lerpVectors(warp.from, warp.to, e);
+    camera.lookAt(warp.lookAt);
+    camera.fov = baseFov + HYPERSPACE.fovBoost * e;
+    hyperspace.intensity = p;
+    ui.setWarpTint(p * 0.85);
+    // Start the white flash a little before the end; the new world loads while it's white.
+    if (!warp.flashed && warp.t > HYPERSPACE.diveTime - 0.6) {
+      warp.flashed = true;
+      ui.flash(arriveInNextLevel);
+    }
+  } else {
+    const p = Math.min(1, warp.t / HYPERSPACE.arriveTime);
+    const e = 1 - (1 - p) * (1 - p) * (1 - p); // "ease out": fast at first, then gently
+    camera.fov = baseFov + HYPERSPACE.fovBoost * (1 - e);
+    hyperspace.intensity = 1 - p;
+    ui.setWarpTint((1 - p) * 0.85);
+    if (p >= 1) {
+      // Arrived! Hand control back to the player.
+      warp = null;
+      camera.fov = baseFov;
+      game.state = 'playing';
+      bobber.setControlsEnabled(true);
+      ui.setWarpMode(false);
+      ui.showToast(`Level ${game.levelIndex + 1}: ${getLevel().name}`, 2.5);
+    }
+  }
+  camera.updateProjectionMatrix();
+}
+
+// Called while the screen is white: build the next world and put the bobber at its start.
+function arriveInNextLevel() {
+  game.levelIndex++;
+  game.reset(); // new score and timer for this level; lives carry over
+  beginLevel();
+  game.state = 'warping'; // ...but keep warping until we've slowed down
+  bobber.setControlsEnabled(false);
+  warp.phase = 'arrive';
+  warp.t = 0;
 }
 
 function openSettings() {
@@ -170,6 +253,7 @@ function showLevelComplete() {
   const next = LEVELS[game.levelIndex + 1];
   if (next) {
     ui.showLevelComplete(result, game.runTotal, getLevel().name, next.name);
+    startWarpCountdown();
   } else {
     const isNewBest = recordScore(settings.difficulty, game.runTotal);
     ui.showVictory(result, game.runTotal, isNewBest, loadBestScores()[settings.difficulty]);
@@ -347,7 +431,7 @@ function checkForHits() {
 function fellIntoSpace() {
   if (game.state !== 'playing' || game.isRespawning()) return;
   playFall();
-  loseALife('Lost in space!');
+  loseALife(getTheme().fallMessage);
 }
 
 function loseALife(message) {
@@ -429,6 +513,17 @@ let lastFrameTime = performance.now();
 // Moves the whole game forward by dt seconds.
 function step(dt) {
   if (game.state === 'paused') return;
+  if (game.state === 'warping') {
+    // During hyperspace only the scenery moves; the warp controls the camera.
+    gameTime += dt;
+    world.update(gameTime);
+    if (warp.phase === 'arrive') {
+      bobber.update(dt, gameTime);
+      updateCamera(dt);
+    }
+    updateWarp(dt);
+    return;
+  }
   gameTime += dt;
   const time = gameTime;
   world.update(time);
@@ -478,6 +573,15 @@ function loop(now = performance.now()) {
   const toPortal = Math.abs(bobber.position.z - getLevel().finishZ);
   setPortalHum(game.state === 'playing' ? Math.max(0, 1 - toPortal / 80) : 0);
   renderer.render(scene, camera);
+  // Hyperspace streaks are drawn on top of the game (clearing only the depth, so the
+  // game picture stays and the streaks appear in front of it).
+  if (hyperspace.active) {
+    hyperspace.update(dt);
+    renderer.autoClear = false;
+    renderer.clearDepth();
+    renderer.render(hyperspace.scene, hyperspace.camera);
+    renderer.autoClear = true;
+  }
   requestAnimationFrame(loop);
 }
 loop();

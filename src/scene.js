@@ -69,6 +69,7 @@ export function createScene(canvas) {
   function fitToWindow() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.fov = camera.aspect < 1 ? SCENE.portraitFov : SCENE.cameraFov;
+    camera.userData.baseFov = camera.fov; // remembered, so hyperspace can stretch it and put it back
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
   }

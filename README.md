@@ -3,9 +3,10 @@
 *A fishing-themed 3D ball game by Eliott, built with [Claude Code](https://claude.com/claude-code) for a 10th grade tech project.*
 
 Steer a fishing bobber across a lake, pass all 4 checkpoints, dodge (or zap!) fishing-themed
-obstacles, grab coins, and fly into the swirling portal at the end. The portal warps you to
-the next world: **Space Lakes**, where lakes float on islands among the stars and you have to
-fly from one to the next.
+obstacles, grab coins, and fly into the swirling portal at the end. The portal shows your
+score, then blasts you through hyperspace to the next world: **Space Lakes**, where lakes
+float on islands among the stars, and then **Lava Lagoon**, where cool pools sit on volcanic
+rock above a sea of lava. You have to fly from one lake to the next.
 
 Plays on computers, tablets and phones.
 
@@ -33,9 +34,11 @@ Plays on computers, tablets and phones.
 |---|---|
 | 1. Home Lake | A curvy lake with beaches, trees, frogs and birds, starting from a wooden dock |
 | 2. Space Lakes | Four lakes on floating islands among the stars. Fly across the gaps between them |
+| 3. Lava Lagoon | Five narrow, twisty pools on volcanic islands. Fall in a gap and it's into the lava! |
 
-Your lives and score carry from one world to the next. You can also jump straight to a
-world from the title screen.
+Your lives and score carry from one world to the next. After each portal, the score screen
+counts down and then jumps to hyperspace automatically (or press **Warp now**). You can also
+jump straight to a world from the title screen.
 
 ### Obstacles
 
@@ -106,6 +109,7 @@ Audio API.
 | `src/world.js` | The scenery for each world: lakes, waves, islands, dock, trees, stars, portal |
 | `src/bobber.js` | The player: model, mouse/finger/keyboard steering, flying, bobbing |
 | `src/shooting.js` | The zapper: firing zaps and what they hit |
+| `src/hyperspace.js` | The star-streak hyperspace effect between worlds |
 | `src/device.js` | Detects phones/tablets (for touch buttons and lighter graphics) |
 | `src/checkpoints.js` | Checkpoint gates and progress tracking |
 | `src/obstacles.js` | Every obstacle type and how it moves |
@@ -113,7 +117,7 @@ Audio API.
 | `src/game.js` | Lives, score, timer, game states, runs through the worlds, collisions |
 | `src/ui.js` | HUD and menus (HTML/CSS on top of the 3D view) |
 | `src/settings.js` | Saving settings and best scores |
-| `src/audio.js` | Generated sound effects, lake sounds and the space hum |
+| `src/audio.js` | Generated sound effects, lake sounds, space hum and lava rumble |
 | `src/effects.js` | Splashes, sparkles, confetti and the wake trail |
 | `src/wildlife.js` | Frogs and birds on the shore |
 

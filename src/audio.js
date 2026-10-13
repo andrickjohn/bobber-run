@@ -17,7 +17,8 @@ let ctx = null;
 let master = null;     // the main volume knob: every sound goes through it (mute sets it to 0)
 let muted = false;
 let ambientOut = null; // volume knob for all the lake sounds
-let ambientTheme = 'lake'; // 'lake' = water and frogs, 'space' = a soft cosmic hum
+let ambientTheme = 'lake'; // 'lake' = water and frogs, 'space' = cosmic hum, 'lava' = rumble
+let lavaRumble = null;   // the lava rumble's volume knob
 let spaceHum = null;     // the hum's volume knob (made the first time it's needed)
 let noise = null;      // a couple of seconds of random hiss, reused for splashy sounds
 
@@ -61,10 +62,10 @@ function makeNoise(seconds) {
 }
 
 // Runs playSound() again and again, waiting a random time (minWait–maxWait seconds)
-// in between. Skips playing while the browser tab is hidden.
-function repeatRandomly(playSound, minWait, maxWait) {
+// in between. Only plays in the given world theme, and not while the tab is hidden.
+function repeatRandomly(playSound, minWait, maxWait, theme) {
   function next() {
-    if (ctx.state === 'running' && !document.hidden && ambientTheme === 'lake') playSound();
+    if (ctx.state === 'running' && !document.hidden && ambientTheme === theme) playSound();
     setTimeout(next, rand(minWait, maxWait) * 1000);
   }
   setTimeout(next, rand(minWait, maxWait) * 1000);
@@ -190,8 +191,9 @@ function startLakeSounds() {
 
   // Each sound repeats at its own random pace (seconds between plays).
   // (Birds and frogs are started by wildlife.js, so they match what you see.)
-  repeatRandomly(playLap, 1.2, 3.5);
-  repeatRandomly(playBloop, 1.5, 5);
+  repeatRandomly(playLap, 1.2, 3.5, 'lake');
+  repeatRandomly(playBloop, 1.5, 5, 'lake');
+  repeatRandomly(playCrackle, 0.3, 1.6, 'lava');
   setAmbientTheme(ambientTheme);
 }
 
@@ -220,12 +222,53 @@ function startSpaceHum() {
   filter.connect(spaceHum).connect(ambientOut);
 }
 
-// Switch the background sounds to match the level: 'lake' or 'space'.
+// The lava world's deep rumble: noise with only the very lowest sounds let through,
+// slowly swelling, like a volcano grumbling far away.
+function startLavaRumble() {
+  lavaRumble = ctx.createGain();
+  lavaRumble.gain.value = 0;
+  const src = ctx.createBufferSource();
+  src.buffer = noise;
+  src.loop = true;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 120;
+  const swell = ctx.createGain();
+  swell.gain.value = 1;
+  const lfo = ctx.createOscillator();
+  lfo.frequency.value = 0.15;
+  const lfoDepth = ctx.createGain();
+  lfoDepth.gain.value = 0.5;
+  lfo.connect(lfoDepth).connect(swell.gain);
+  lfo.start();
+  src.connect(filter).connect(swell).connect(lavaRumble).connect(ambientOut);
+  src.start();
+}
+
+// Lava crackle: a tiny sharp pop of noise, like a bubble bursting or a rock cracking.
+function playCrackle() {
+  const t = ctx.currentTime;
+  const src = ctx.createBufferSource();
+  src.buffer = noise;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'highpass';
+  filter.frequency.value = rand(1500, 4000);
+  const gain = ctx.createGain();
+  const length = rand(0.02, 0.06);
+  gain.gain.setValueAtTime(rand(0.04, 0.12), t);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + length);
+  src.connect(filter).connect(gain).connect(ambientOut);
+  src.start(t, rand(0, noise.duration - 0.2), length + 0.02);
+}
+
+// Switch the background sounds to match the level: 'lake', 'space' or 'lava'.
 export function setAmbientTheme(theme) {
   ambientTheme = theme;
   if (!ctx || !ambientOut) return; // sound hasn't started yet; it'll use this theme when it does
   if (theme === 'space' && !spaceHum) startSpaceHum();
+  if (theme === 'lava' && !lavaRumble) startLavaRumble();
   if (spaceHum) spaceHum.gain.setTargetAtTime(theme === 'space' ? 0.08 : 0, ctx.currentTime, 0.5);
+  if (lavaRumble) lavaRumble.gain.setTargetAtTime(theme === 'lava' ? 0.5 : 0, ctx.currentTime, 0.5);
 }
 
 // Plays one note.
@@ -394,23 +437,6 @@ export function playFall() {
   osc.stop(t + 1.2);
 }
 
-// Warping through the portal: a sweep rising up and up, with a sparkly shimmer.
-export function playWarp() {
-  if (!ctx || ctx.state !== 'running') return;
-  const t = ctx.currentTime;
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = 'triangle';
-  osc.frequency.setValueAtTime(200, t);
-  osc.frequency.exponentialRampToValueAtTime(1800, t + 0.9);
-  gain.gain.setValueAtTime(0.0001, t);
-  gain.gain.exponentialRampToValueAtTime(0.18 * AUDIO.effectsVolume + 0.0001, t + 0.1);
-  gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.0);
-  osc.connect(gain).connect(master);
-  osc.start(t);
-  osc.stop(t + 1.1);
-  [1568, 2093, 2637, 3136].forEach((f, i) => tone(f, 0.4 + i * 0.08, 0.3, 'sine', 0.08));
-}
 
 // Picking up a Zap Pack: three quick rising electric blips.
 export function playReload() {
@@ -447,4 +473,51 @@ export function setPortalHum(closeness) {
   if (!ctx || ctx.state !== 'running') return;
   if (!portalGain) startPortalHum();
   portalGain.gain.setTargetAtTime(closeness * 0.06 * AUDIO.effectsVolume, ctx.currentTime, 0.2);
+}
+
+// The hyperspace jump: a roar that rises higher and louder for "seconds", then a deep
+// BOOM as you burst through (the moment the screen flashes white).
+export function playHyperspace(seconds) {
+  if (!ctx || ctx.state !== 'running' || !noise) return;
+  const t = ctx.currentTime;
+  const v = AUDIO.effectsVolume;
+  // Rising roar: noise through a filter that sweeps from low to high.
+  const src = ctx.createBufferSource();
+  src.buffer = noise;
+  src.loop = true;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.Q.value = 1.5;
+  filter.frequency.setValueAtTime(150, t);
+  filter.frequency.exponentialRampToValueAtTime(4000, t + seconds);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.35 * v + 0.0001, t + seconds);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + seconds + 0.4);
+  src.connect(filter).connect(gain).connect(master);
+  src.start(t);
+  src.stop(t + seconds + 0.5);
+  // A rising tone on top.
+  const osc = ctx.createOscillator();
+  const og = ctx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(80, t);
+  osc.frequency.exponentialRampToValueAtTime(900, t + seconds);
+  og.gain.setValueAtTime(0.0001, t);
+  og.gain.exponentialRampToValueAtTime(0.06 * v + 0.0001, t + seconds * 0.9);
+  og.gain.exponentialRampToValueAtTime(0.0001, t + seconds + 0.1);
+  osc.connect(og).connect(master);
+  osc.start(t);
+  osc.stop(t + seconds + 0.2);
+  // BOOM: a deep note that drops and fades.
+  const boom = ctx.createOscillator();
+  const bg = ctx.createGain();
+  boom.frequency.setValueAtTime(120, t + seconds);
+  boom.frequency.exponentialRampToValueAtTime(35, t + seconds + 1.2);
+  bg.gain.setValueAtTime(0.0001, t + seconds);
+  bg.gain.exponentialRampToValueAtTime(0.5 * v + 0.0001, t + seconds + 0.03);
+  bg.gain.exponentialRampToValueAtTime(0.0001, t + seconds + 1.4);
+  boom.connect(bg).connect(master);
+  boom.start(t + seconds);
+  boom.stop(t + seconds + 1.5);
 }

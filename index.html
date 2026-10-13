@@ -167,6 +167,14 @@
       body.title-mode .energy, body.title-mode .ammo { display: none; }
       .level-picker { margin-top: 12px; font-size: 15px; }
       .level-picker .choices { margin-top: 6px; }
+      .warp-tint {
+        position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 9;
+        background: radial-gradient(ellipse at center, rgba(125,249,255,0) 30%, rgba(40,90,255,0.55) 80%, rgba(10,20,80,0.9) 100%);
+      }
+      .warp-countdown { font-size: 18px !important; }
+      body.warping .title, body.warping .score, body.warping .hud, body.warping .top-buttons,
+      body.warping .lives, body.warping .energy, body.warping .ammo, body.warping .progress,
+      body.warping .toast, body.warping .touch-controls { visibility: hidden; }
       .flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity 0.6s; z-index: 10; }
       .flash.on { opacity: 1; }
       /* ----- Touchscreen Fly / Zap buttons (bottom-right, thumb-sized) ----- */

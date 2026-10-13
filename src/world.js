@@ -58,6 +58,11 @@ export function isOverLake(z, margin = 0) {
 // Each curve adds a few sine waves of different lengths. Because the lengths don't
 // line up, the result looks irregular, like a real lake, but it's the same every time.
 
+// How wide this level's lakes are on average (some levels have narrower ones).
+function laneWidth() {
+  return level.width ?? LAKE.width;
+}
+
 // 0 near the start, smoothly rising to 1 further out, so the start area stays straight.
 function shapeFade(z) {
   return THREE.MathUtils.smoothstep(-z, 0, LAKE.straightStart);
@@ -73,7 +78,7 @@ export function lakeHalfWidth(z) {
     Math.sin(z * 0.019 + 1.0) * 0.55 +
     Math.sin(z * 0.053 + 2.3) * 0.3 +
     Math.sin(z * 0.11 + 0.4) * 0.15;
-  return LAKE.width / 2 + shapeFade(z) * level.widthWiggle * wiggle;
+  return laneWidth() / 2 + shapeFade(z) * level.widthWiggle * wiggle;
 }
 
 // Left and right edge of the water at this Z. The bobber is kept between these.
@@ -168,6 +173,7 @@ export function createWorld(scene) {
   // Water: one sheet per lake. Each knows which of its points are really lake
   // (the rest are tucked away under the land).
   const waters = [];
+  let decor = null; // sky decorations for island worlds (some of them move)
   const lakesToFill = theme.islands ? level.lakes : [null]; // null = one sheet for the whole level
   for (const lake of lakesToFill) {
     const water = createWater(theme, lake);
@@ -178,7 +184,8 @@ export function createWorld(scene) {
   if (theme.islands) {
     for (const lake of level.lakes) root.add(createIsland(theme, lake));
     root.add(createCrystals(theme));
-    root.add(createSpaceSky());
+    decor = theme.decor === 'lava' ? createLavaSky(theme) : { group: createSpaceSky(), update() {} };
+    root.add(decor.group);
     root.add(createSpaceStartLine(theme));
   } else {
     root.add(createTerrain(theme));
@@ -195,6 +202,7 @@ export function createWorld(scene) {
   function update(time) {
     for (const w of waters) w.update(time);
     portal.update(time);
+    if (decor) decor.update(time);
   }
 
   // Remove this level's scenery and free its memory.
@@ -219,7 +227,7 @@ export function createWorld(scene) {
 // lake = one lake (space islands), or null = cover the whole level (Home Lake).
 function createWater(theme, lake) {
   // Wide enough to cover the lake at its widest and most bent point.
-  const halfX = LAKE.width / 2 + level.widthWiggle + level.bend + LAKE.shoreBumps + 10;
+  const halfX = laneWidth() / 2 + level.widthWiggle + level.bend + LAKE.shoreBumps + 10;
   const bounds = getWaterBounds();
   const maxZ = (lake ? lake.start : bounds.maxZ) + 10;
   const minZ = (lake ? lake.end : bounds.minZ) - 10;
@@ -338,7 +346,7 @@ function createLandSheet(theme, minX, maxX, minZ, maxZ, onlyLake) {
 // Home Lake: one big sheet for the lake bottom, beaches and hills.
 function createTerrain(theme) {
   const bounds = getWaterBounds();
-  const halfX = LAKE.width / 2 + SHORE.landSize;
+  const halfX = laneWidth() / 2 + SHORE.landSize;
   return createLandSheet(theme, -halfX, halfX, bounds.minZ - SHORE.landSize, bounds.maxZ + SHORE.landSize, null);
 }
 
@@ -348,11 +356,11 @@ function createIsland(theme, lake) {
   const group = new THREE.Group();
   const reach = SHORE.sandWidth + SHORE.islandRim + 4; // how far the island goes past the water
   const reachZ = reach / 2.5 + 2; // much shorter at the front and back (see distanceFromShore)
-  const halfX = LAKE.width / 2 + level.widthWiggle + level.bend + reach;
+  const halfX = laneWidth() / 2 + level.widthWiggle + level.bend + reach;
   group.add(createLandSheet(theme, -halfX, halfX, lake.end - reachZ, lake.start + reachZ, lake));
 
   // The rocky underside. A cone pointing down, stretched to the island's shape.
-  // (Multiplying the half-sizes by 1.2 makes the cone's top reach out near the corners.)
+  // (It stays inside the island, so neighboring islands don't touch over the gaps.)
   const halfZ = (lake.start - lake.end) / 2 + reachZ;
   const depth = 50;
   const coneGeo = new THREE.ConeGeometry(1, depth, 10, 4);
@@ -364,9 +372,15 @@ function createIsland(theme, lake) {
     p.setZ(i, p.getZ(i) * wobble);
   }
   coneGeo.computeVertexNormals();
-  const cone = new THREE.Mesh(coneGeo, new THREE.MeshStandardMaterial({ color: theme.rock, flatShading: true }));
+  // In the lava world the rock glows a little, lit from below by the lava.
+  const coneMat = new THREE.MeshStandardMaterial({
+    color: theme.rock,
+    emissive: theme.undersideGlow || 0x000000,
+    flatShading: true,
+  });
+  const cone = new THREE.Mesh(coneGeo, coneMat);
   cone.rotation.x = Math.PI; // point down
-  cone.scale.set(halfX * 1.2, 1, halfZ * 1.2);
+  cone.scale.set(halfX, 1, halfZ);
   cone.position.set(lakeCenterX((lake.start + lake.end) / 2), -8 - depth / 2, (lake.start + lake.end) / 2);
   group.add(cone);
   return group;
@@ -425,6 +439,80 @@ function createSpaceSky() {
     group.add(rock);
   }
   return group;
+}
+
+// ---------------------------------------------------------------------------
+// Lava world: a glowing lava sea far below, volcanoes in the distance, rising embers
+// ---------------------------------------------------------------------------
+const LAVA_Y = -32; // height of the lava sea (the islands' rocky bottoms reach down into it)
+
+function createLavaSky(theme) {
+  const group = new THREE.Group();
+
+  // The lava sea: a huge bumpy sheet far below the islands, glowing orange.
+  // Fall into a gap and this is where you're headed!
+  const seaGeo = new THREE.PlaneGeometry(1400, 1400, 50, 50);
+  seaGeo.rotateX(-Math.PI / 2);
+  const sp = seaGeo.attributes.position;
+  for (let i = 0; i < sp.count; i++) sp.setY(i, Math.sin(sp.getX(i) * 0.05) * Math.cos(sp.getZ(i) * 0.04) * 3);
+  seaGeo.computeVertexNormals();
+  const seaMat = new THREE.MeshStandardMaterial({
+    color: theme.lava,
+    emissive: theme.lava,
+    emissiveIntensity: 1.1,
+    flatShading: true,
+  });
+  const sea = new THREE.Mesh(seaGeo, seaMat);
+  sea.position.set(0, LAVA_Y, -200);
+  group.add(sea);
+
+  // Volcanoes: big dark cones off to the sides, each with a glowing crater on top.
+  const rockMat = new THREE.MeshStandardMaterial({ color: 0x241815, flatShading: true });
+  const craterMat = new THREE.MeshBasicMaterial({ color: 0xffa040 });
+  for (let i = 0; i < 6; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const height = THREE.MathUtils.randFloat(70, 140);
+    const radius = height * 0.7;
+    const volcano = new THREE.Mesh(new THREE.ConeGeometry(radius, height, 9, 1, true), rockMat);
+    const x = side * THREE.MathUtils.randFloat(170, 320);
+    const z = THREE.MathUtils.randFloat(-650, -50);
+    volcano.position.set(x, LAVA_Y + height / 2, z);
+    const crater = new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.12, radius * 0.12, 2, 9), craterMat);
+    crater.position.set(x, LAVA_Y + height - 2, z);
+    group.add(volcano, crater);
+  }
+
+  // Embers: little glowing specks drifting up from the lava.
+  const emberCount = 350;
+  const emberPos = new Float32Array(emberCount * 3);
+  const startY = new Float32Array(emberCount);
+  const riseSpeed = new Float32Array(emberCount);
+  for (let i = 0; i < emberCount; i++) {
+    emberPos[i * 3] = THREE.MathUtils.randFloatSpread(180);
+    emberPos[i * 3 + 2] = THREE.MathUtils.randFloat(-460, 40);
+    startY[i] = Math.random() * 80;
+    riseSpeed[i] = THREE.MathUtils.randFloat(2, 6);
+  }
+  const emberGeo = new THREE.BufferGeometry();
+  emberGeo.setAttribute('position', new THREE.BufferAttribute(emberPos, 3));
+  const embers = new THREE.Points(
+    emberGeo,
+    new THREE.PointsMaterial({ color: 0xffb040, size: 0.5, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })
+  );
+  group.add(embers);
+
+  function update(time) {
+    // The lava glows brighter and dimmer, like it's bubbling.
+    seaMat.emissiveIntensity = 1.0 + Math.sin(time * 1.3) * 0.2;
+    // Each ember rises from the lava up to 80 units higher, then starts again at the bottom.
+    // "%" (remainder) makes the height wrap around: 0, 1, 2 ... 79, 0, 1 ...
+    for (let i = 0; i < emberCount; i++) {
+      emberPos[i * 3 + 1] = LAVA_Y + ((startY[i] + time * riseSpeed[i]) % 80);
+    }
+    emberGeo.attributes.position.needsUpdate = true;
+  }
+
+  return { group, update };
 }
 
 // Glowing crystals growing on the island rims (instead of trees).
@@ -692,7 +780,7 @@ function createStartLine() {
 
 // Picks a random spot whose distance from the water is between minD and maxD.
 function randomSpotNearShore(minD, maxD) {
-  const halfX = LAKE.width / 2 + SHORE.landSize - 10;
+  const halfX = laneWidth() / 2 + SHORE.landSize - 10;
   const bounds = getWaterBounds();
   for (let tries = 0; tries < 2000; tries++) {
     const x = THREE.MathUtils.randFloat(-halfX, halfX);
