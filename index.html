@@ -141,6 +141,17 @@
       .menu td { padding: 3px 10px; text-align: left; }
       .menu td:last-child { text-align: right; font-weight: 700; }
       .menu tr.total td { border-top: 2px solid #0b4f5c; font-size: 20px; padding-top: 6px; }
+      .energy { position: fixed; top: 82px; right: 14px; display: flex; align-items: center; gap: 6px; pointer-events: none;
+        filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35)); }
+      .energy span { font-size: 16px; }
+      .energy-track { width: 84px; height: 9px; border-radius: 5px; background: rgba(255,255,255,0.45); overflow: hidden; }
+      .energy-fill { height: 100%; width: 100%; background: #ffd54f; transition: background 0.2s; }
+      .energy-fill.low { background: #ff5252; }
+      .ammo { position: fixed; top: 102px; right: 14px; display: flex; align-items: center; gap: 4px; pointer-events: none; }
+      .ammo-label { font-size: 14px; margin-right: 2px; }
+      .zap-dot { width: 10px; height: 10px; border-radius: 50%; background: #7df9ff; box-shadow: 0 0 6px #00b8d4; }
+      .zap-dot.empty { background: rgba(255,255,255,0.35); box-shadow: none; }
+      body.title-mode .energy, body.title-mode .ammo { display: none; }
       .hidden { display: none; }
     </style>
   </head>

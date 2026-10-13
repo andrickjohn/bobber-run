@@ -6,7 +6,7 @@
 // (about 60 times a second).
 
 import * as THREE from 'three';
-import { CAMERA, BOBBER, OBSTACLES, LAKE, COURSE, EFFECTS } from './config.js';
+import { CAMERA, BOBBER, OBSTACLES, LAKE, COURSE, EFFECTS, FLY, SHOOT } from './config.js';
 import { createScene, getChaseCameraPose } from './scene.js';
 import { createWorld, lakeCenterX } from './world.js';
 import { createBobber } from './bobber.js';
@@ -16,9 +16,10 @@ import { createWildlife } from './wildlife.js';
 import { createEffects } from './effects.js';
 import { createGame, bobberHitsAny, formatTime } from './game.js';
 import { createCoins } from './coins.js';
+import { createShooter } from './shooting.js';
 import { createUI } from './ui.js';
 import { loadSettings, saveSettings, applySettings, loadBestScores, recordScore } from './settings.js';
-import { playChime, playFanfare, playBuzz, playSplash, playGameOver, playDing, playGoldenDing, setMuted } from './audio.js';
+import { playChime, playFanfare, playBuzz, playSplash, playGameOver, playDing, playGoldenDing, setMuted, setThrust, playPlop, playZap, playPoof } from './audio.js';
 
 const canvas = document.getElementById('game');
 const { renderer, scene, camera, followWithSun } = createScene(canvas);
@@ -29,6 +30,7 @@ const obstacles = createObstacles(scene);
 const wildlife = createWildlife(scene);
 const effects = createEffects(scene);
 const coins = createCoins(scene);
+const shooter = createShooter(scene, canvas);
 const game = createGame();
 const ui = createUI();
 
@@ -61,6 +63,7 @@ function setUpCourse() {
   bobber.reset(0, BOBBER.startZ);
   bobber.setVisible(true);
   coins.clear();
+  shooter.clear();
   snapCamera();
   resetHUD();
   ui.setPaused(false);
@@ -239,6 +242,24 @@ function updateCoins(dt, time) {
 }
 
 // ---------------------------------------------------------------------------
+// Zapping
+// ---------------------------------------------------------------------------
+function updateShooting(dt, time) {
+  const canShoot = game.state === 'playing' && !game.isRespawning();
+  const shots = shooter.update(dt, time, bobber, obstacles, canShoot);
+  if (shots.fired) playZap();
+  for (const z of shots.zapped) {
+    // Poof! The obstacle disappears in a burst of sparkles and a splash.
+    effects.sparkle(z.x, z.y + 0.5, z.z, true);
+    effects.splash(z.x, Math.max(0, z.y), z.z, 0.5);
+    playPoof();
+    scorePoints(game.addZap());
+  }
+  for (const p of shots.splashes) effects.splash(p.x, p.y, p.z, 0.25); // missed, hit the water
+  ui.setAmmo(shooter.ammo, SHOOT.maxAmmo);
+}
+
+// ---------------------------------------------------------------------------
 // Getting hit
 // ---------------------------------------------------------------------------
 function checkForHits() {
@@ -283,7 +304,7 @@ const wantedPosition = new THREE.Vector3();
 const wantedLookAt = new THREE.Vector3();
 
 function placeCamera(p) {
-  getChaseCameraPose(p, wantedPosition, wantedLookAt);
+  getChaseCameraPose(p, wantedPosition, wantedLookAt, bobber.height);
 }
 
 // The smooth camera position (without any shake added).
@@ -334,12 +355,18 @@ function step(dt) {
   obstacles.update(dt, time, bobber, game.isInvincible()); // also lets lily pads / whirlpools push the bobber
   if (game.isRespawning()) bobber.velocity.set(0, 0, 0); // stay put while "under water"
   wildlife.update(dt, bobber.position);
-  const wakeOn = game.state === 'playing' && !game.isRespawning();
+  const wakeOn = game.state === 'playing' && !game.isRespawning() && bobber.onWater;
   effects.update(dt, time, bobber, wakeOn);
   updateCoins(dt, time);
 
   previousPosition.copy(bobber.position); // remember where we were, to detect crossing lines
-  bobber.update(dt, time);
+  const flightEvent = bobber.update(dt, time);
+  if (flightEvent && flightEvent.landed && game.state === 'playing') {
+    // Splashing down after a flight
+    effects.splash(bobber.position.x, bobber.mesh.position.y - BOBBER.floatOffset, bobber.position.z, 0.6);
+    playPlop();
+  }
+  updateShooting(dt, time);
   const event = checkpoints.update(previousPosition, bobber.position, time);
   if (game.state === 'playing') handleCourseEvent(event);
   checkForHits();
@@ -349,6 +376,8 @@ function step(dt) {
   if (game.update(dt)) respawn(); // true when the respawn wait just finished
   ui.setTimer(formatTime(game.time));
   ui.setProgress(-bobber.position.z / LAKE.length);
+  const f = bobber.flight;
+  ui.setEnergy(f.energy, !f.flying && f.energy < FLY.minEnergyToFly);
   if (game.state === 'playing' && !game.isRespawning()) bobber.setVisible(game.blinkVisible());
 
   updateCamera(dt);
@@ -362,6 +391,8 @@ function loop(now = performance.now()) {
   const dt = Math.min((now - lastFrameTime) / 1000, 0.05);
   lastFrameTime = now;
   step(Math.max(0, dt));
+  // Flying whoosh: on while flying during a race, off otherwise (including when paused).
+  setThrust(game.state === 'playing' && bobber.flight.flying ? 1 : 0);
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
 }

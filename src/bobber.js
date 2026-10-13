@@ -2,9 +2,11 @@
 // The player: a red-and-white fishing bobber.
 // It floats on the waves and glides toward wherever the mouse is pointing on the water.
 // The arrow keys (or W/A/S/D) can steer it too.
+// Holding Space (or the mouse button) makes it FLY: it climbs to hover height and stays
+// there until you let go or run out of energy, then glides back down to the water.
 
 import * as THREE from 'three';
-import { BOBBER, COLORS } from './config.js';
+import { BOBBER, FLY, SHOOT, COLORS } from './config.js';
 import { getChaseCameraPose } from './scene.js';
 import { getWaveHeight, getLakeEdges, WATER_BOUNDS } from './world.js';
 
@@ -49,9 +51,23 @@ export function createBobber(scene, camera, canvas) {
   marker.visible = false;
   scene.add(marker);
 
+  // A soft dark spot on the water under the bobber while it flies,
+  // so you can tell how high it is and where it will land.
+  const blob = new THREE.Mesh(
+    new THREE.CircleGeometry(r * 1.1, 20),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false })
+  );
+  blob.rotation.x = -Math.PI / 2;
+  blob.visible = false;
+  scene.add(blob);
+
   // ----- Movement state -----
-  const position = new THREE.Vector3(0, 0, BOBBER.startZ); // only X and Z matter for movement
+  const position = new THREE.Vector3(0, 0, BOBBER.startZ); // only X and Z matter for steering
   const velocity = new THREE.Vector3();
+  // Flying: height above the water, up/down speed, and energy (1 = full, 0 = empty).
+  // mustLetGo: after running out of energy, you have to let go of Fly before flying again
+  // (otherwise holding the button would make it hop up and down as energy trickles back).
+  const flight = { height: 0, vy: 0, energy: 1, flying: false, mustLetGo: false };
   let speedSetting = BOBBER.speedSetting;
   let controlsEnabled = true; // turned off when the game is over or won
 
@@ -71,6 +87,18 @@ export function createBobber(scene, camera, canvas) {
   document.addEventListener('mouseleave', () => (hasMouse = false));
   window.addEventListener('blur', () => (hasMouse = false));
 
+  // ----- Fly button -----
+  // Fly while Space is held, or while the left mouse button is held down on the game.
+  let flyKeyDown = false;
+  let flyMouseDown = false;
+  let flyButtonDown = false; // the on-screen Fly button (for touchscreens)
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button === 0) flyMouseDown = true;
+  });
+  window.addEventListener('pointerup', (e) => {
+    if (e.pointerType === 'mouse' && e.button === 0) flyMouseDown = false;
+  });
+
   // ----- Keyboard -----
   // Arrow keys or W/A/S/D also steer. We remember which keys are held down right now.
   const KEY_DIRECTIONS = {
@@ -81,6 +109,11 @@ export function createBobber(scene, camera, canvas) {
   };
   const held = { forward: false, back: false, left: false, right: false };
   window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+      flyKeyDown = true;
+      e.preventDefault(); // stop Space from scrolling the page or "clicking" a button
+      return;
+    }
     const dir = KEY_DIRECTIONS[e.code];
     if (!dir) return;
     held[dir] = true;
@@ -89,8 +122,11 @@ export function createBobber(scene, camera, canvas) {
   });
   function releaseAllKeys() {
     for (const k in held) held[k] = false;
+    flyKeyDown = false;
+    flyMouseDown = false;
   }
   window.addEventListener('keyup', (e) => {
+    if (e.code === 'Space') flyKeyDown = false;
     const dir = KEY_DIRECTIONS[e.code];
     if (dir) held[dir] = false;
     // On a Mac, keys let go while ⌘ is held never send "keyup", so let go of everything.
@@ -134,10 +170,10 @@ export function createBobber(scene, camera, canvas) {
   function screenDistance() {
     idealCamera.aspect = camera.aspect;
     idealCamera.updateProjectionMatrix();
-    getChaseCameraPose(position, idealCamera.position, idealLookAt);
+    getChaseCameraPose(position, idealCamera.position, idealLookAt, flight.height);
     idealCamera.lookAt(idealLookAt);
     idealCamera.updateMatrixWorld();
-    onScreen.set(position.x, 0, position.z).project(idealCamera);
+    onScreen.set(position.x, flight.height, position.z).project(idealCamera);
     const dx = (mouse.x - onScreen.x) * camera.aspect;
     const dy = mouse.y - onScreen.y;
     return Math.sqrt(dx * dx + dy * dy);
@@ -149,9 +185,45 @@ export function createBobber(scene, camera, canvas) {
     return 0.4 + 0.12 * speedSetting;
   }
 
+  // ----- Flying -----
+  // Returns the landing speed on the frame the bobber touches down (for a splash), else 0.
+  function updateFlight(dt) {
+    const wantsToFly = controlsEnabled && (flyKeyDown || flyMouseDown || flyButtonDown);
+    if (!wantsToFly) flight.mustLetGo = false;
+    if (flight.energy <= 0) flight.mustLetGo = true;
+    // Take off only with enough energy; once flying, keep going until it runs out.
+    const canFly = flight.flying ? flight.energy > 0 : flight.energy >= FLY.minEnergyToFly && !flight.mustLetGo;
+    if (wantsToFly && canFly) {
+      flight.flying = true;
+      // Steer the up/down speed toward "the speed that gets us to hover height".
+      // Far below → climb at full speed. At hover height → speed 0, so it hovers.
+      const wantedVy = THREE.MathUtils.clamp((FLY.hoverHeight - flight.height) * 3, -FLY.climbSpeed, FLY.climbSpeed);
+      flight.vy += (wantedVy - flight.vy) * Math.min(1, 6 * dt);
+      flight.energy = Math.max(0, flight.energy - FLY.energyDrain * dt);
+    } else {
+      flight.flying = false;
+      flight.vy -= FLY.gravity * dt; // let go (or out of energy): glide back down
+    }
+
+    flight.height += flight.vy * dt;
+    let landingSpeed = 0;
+    if (flight.height <= 0) {
+      if (flight.vy < 0 && flight.height < 0) landingSpeed = -flight.vy;
+      flight.height = 0;
+      flight.vy = 0;
+    }
+    // Recharge while floating on the water.
+    if (flight.height === 0 && !flight.flying) {
+      flight.energy = Math.min(1, flight.energy + FLY.energyRecharge * dt);
+    }
+    return landingSpeed;
+  }
+
   // ----- Called every frame -----
   // dt = seconds since the last frame, time = seconds since the game started.
+  // Returns { landed: speed } on the frame it splashes down from a flight, otherwise null.
   function update(dt, time) {
+    const landingSpeed = updateFlight(dt);
     const factor = speedFactor();
     const maxSpeed = BOBBER.maxSpeed * factor;
 
@@ -195,14 +267,24 @@ export function createBobber(scene, camera, canvas) {
 
     keepInsideLake();
 
-    // Float on the waves and bob a little on top of that.
+    // Float on the waves and bob a little on top of that. The waves matter less the
+    // higher it flies ("onWater" goes from 1 on the water down to 0 at 2 units up).
     const wave = getWaveHeight(position.x, position.z, time);
     const bob = Math.sin(time * BOBBER.bobSpeed) * BOBBER.bobHeight;
-    mesh.position.set(position.x, wave + bob + BOBBER.floatOffset, position.z);
+    const onWater = Math.max(0, 1 - flight.height / 2);
+    mesh.position.set(position.x, (wave + bob) * onWater + BOBBER.floatOffset + flight.height, position.z);
 
     // Lean in the direction it's moving.
     mesh.rotation.x = velocity.z * BOBBER.tiltAmount;
     mesh.rotation.z = -velocity.x * BOBBER.tiltAmount;
+
+    // The shadow spot: bigger and fainter the higher we are.
+    blob.visible = mesh.visible && flight.height > 0.3;
+    blob.position.set(position.x, wave + 0.05, position.z);
+    blob.scale.setScalar(1 + flight.height * 0.08);
+    blob.material.opacity = Math.max(0.08, 0.35 - flight.height * 0.03);
+
+    return landingSpeed > FLY.landSplashSpeed ? { landed: landingSpeed } : null;
   }
 
   // If the bobber goes past the shore, put it back on the edge and
@@ -230,10 +312,43 @@ export function createBobber(scene, camera, canvas) {
     }
   }
 
-  // Put the bobber at a spot, stopped.
+  // Put the bobber at a spot on the water, stopped, with full energy.
   function reset(x, z) {
     position.set(x, 0, z);
     velocity.set(0, 0, 0);
+    flight.height = 0;
+    flight.vy = 0;
+    flight.energy = 1;
+    flight.flying = false;
+    flight.mustLetGo = false;
+  }
+
+  // Which way to shoot (a direction of length 1, written into "out").
+  // With the mouse: toward the spot on the water you're pointing at.
+  // Without it (or if that spot is very close): at the water a little ahead of
+  // the way you're moving. When flying, this aims downward at the water, so zaps
+  // can still hit fish and logs below you.
+  function getAim(out) {
+    let tx = target.x;
+    let tz = target.z;
+    const usingMouse = hasMouse && Math.hypot(tx - position.x, tz - position.z) > 4;
+    if (!usingMouse) {
+      const speed = Math.hypot(velocity.x, velocity.z);
+      const fx = speed > 1 ? velocity.x / speed : 0; // moving: aim that way
+      const fz = speed > 1 ? velocity.z / speed : -1; // standing still: aim at the finish
+      tx = position.x + fx * SHOOT.aimAhead;
+      tz = position.z + fz * SHOOT.aimAhead;
+    }
+    // Aim at about the height of things floating on the water.
+    out.set(tx - mesh.position.x, 0.4 - mesh.position.y, tz - mesh.position.z);
+    // When floating on the water, shoot straight out (not into the water right ahead).
+    if (flight.height < 0.5) out.y = 0;
+    return out.normalize();
+  }
+
+  // The on-screen Fly button (touchscreens) calls this.
+  function setFlyButton(down) {
+    flyButtonDown = down;
   }
 
   function setSpeedSetting(value) {
@@ -247,7 +362,14 @@ export function createBobber(scene, camera, canvas) {
   // Used for the blinking after a respawn.
   function setVisible(on) {
     mesh.visible = on;
+    if (!on) blob.visible = false;
   }
 
-  return { mesh, position, velocity, radius: r, update, reset, setSpeedSetting, setControlsEnabled, setVisible };
+  return {
+    mesh, position, velocity, flight, radius: r,
+    update, reset, setSpeedSetting, setControlsEnabled, setVisible, setFlyButton, getAim,
+    // Height above the water and whether it's floating (handy for other files).
+    get height() { return flight.height; },
+    get onWater() { return flight.height < 0.05; },
+  };
 }

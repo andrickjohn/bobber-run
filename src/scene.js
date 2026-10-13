@@ -73,9 +73,10 @@ export function createScene(canvas) {
 // It stays behind and above the bobber and looks ahead toward the finish.
 // Sideways it only follows part of the way (CAMERA.sideFollow), staying near the
 // middle of the lake. Used by main.js (the real camera) and bobber.js (steering math).
-export function getChaseCameraPose(p, outPosition, outLookAt) {
+// altitude = how high the bobber is flying; the camera rises with it.
+export function getChaseCameraPose(p, outPosition, outLookAt, altitude = 0) {
   const middle = lakeCenterX(p.z);
   const x = middle + (p.x - middle) * CAMERA.sideFollow;
-  outPosition.set(x, CAMERA.height, p.z + CAMERA.distance);
-  outLookAt.set(x, 0, p.z - CAMERA.lookAhead);
+  outPosition.set(x, CAMERA.height + altitude * 0.7, p.z + CAMERA.distance);
+  outLookAt.set(x, altitude * 0.6, p.z - CAMERA.lookAhead);
 }

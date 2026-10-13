@@ -271,3 +271,69 @@ export function playDing() {
 export function playGoldenDing() {
   [1047, 1319, 1568, 2093, 2637].forEach((f, i) => tone(f, i * 0.06, 0.35, 'sine', 0.14));
 }
+
+// ----- Flying "whoosh" -----
+// A looping soft noise whose volume follows how hard the bobber is flying.
+let thrustGain = null;
+function startThrustSound() {
+  const src = ctx.createBufferSource();
+  src.buffer = noise;
+  src.loop = true;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 700;
+  filter.Q.value = 0.8;
+  thrustGain = ctx.createGain();
+  thrustGain.gain.value = 0;
+  src.connect(filter).connect(thrustGain).connect(master);
+  src.start();
+}
+
+// level: 0 = silent, 1 = full whoosh. Changes smoothly so it never clicks.
+export function setThrust(level) {
+  if (!ctx || ctx.state !== 'running') return;
+  if (!thrustGain) startThrustSound();
+  thrustGain.gain.setTargetAtTime(level * 0.12 * AUDIO.effectsVolume, ctx.currentTime, 0.08);
+}
+
+// Splashing down after a flight: a short "ploop".
+export function playPlop() {
+  tone(300, 0, 0.18, 'sine', 0.18);
+  tone(160, 0.04, 0.25, 'sine', 0.15);
+}
+
+// Zap: a quick "pew" that slides down in pitch.
+export function playZap() {
+  if (!ctx || ctx.state !== 'running') return;
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(1400, t);
+  osc.frequency.exponentialRampToValueAtTime(300, t + 0.15);
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.07 * AUDIO.effectsVolume + 0.0001, t + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+  osc.connect(gain).connect(master);
+  osc.start(t);
+  osc.stop(t + 0.2);
+}
+
+// Poof: an obstacle got zapped. A burst of noise plus a happy little "bloop" up.
+export function playPoof() {
+  if (!ctx || ctx.state !== 'running' || !noise) return;
+  const t = ctx.currentTime;
+  const src = ctx.createBufferSource();
+  src.buffer = noise;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 1200;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.25 * AUDIO.effectsVolume + 0.0001, t + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+  src.connect(filter).connect(gain).connect(master);
+  src.start(t, 0, 0.35);
+  tone(500, 0.05, 0.2, 'sine', 0.15);
+  tone(900, 0.12, 0.25, 'sine', 0.12);
+}

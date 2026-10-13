@@ -61,6 +61,26 @@ export const BOBBER = {
   startZ: -3,          // where the bobber starts (just past the end of the dock)
 };
 
+export const FLY = {
+  hoverHeight: 6,      // holding Fly climbs to this height and hovers there
+  climbSpeed: 9,       // how fast it climbs (units per second)
+  gravity: 9,          // how fast it falls/glides back down when you let go
+  energyDrain: 0.22,   // energy used per second of flying (1 = full bar, so about 4.5 s)
+  energyRecharge: 0.35, // energy gained per second while floating on the water
+  minEnergyToFly: 0.15, // need at least this much energy to take off again
+  landSplashSpeed: 5,  // landing faster than this makes a splash
+};
+
+export const SHOOT = {
+  speed: 45,           // how fast zaps fly (units per second)
+  life: 1.1,           // seconds before a zap fizzles out
+  cooldown: 0.25,      // seconds between shots while holding the button
+  maxAmmo: 6,          // zaps you can carry
+  reloadTime: 2.5,     // seconds to get one zap back
+  radius: 0.35,        // size of a zap (for hitting things)
+  aimAhead: 15,        // without a mouse target, aim at the water this far ahead
+};
+
 export const COURSE = {
   checkpointCount: 4,  // gates spaced evenly between the start and the finish
   gateWidth: 26,       // distance between a gate's two buoys
@@ -89,7 +109,6 @@ export const OBSTACLES = {
     jumpTime: 1.3,       // seconds in the air
     waitMin: 1.0,        // seconds under water between leaps
     waitMax: 2.5,
-    dangerHeight: 2.0,   // only hits the bobber while lower than this (near the water)
   },
   pike: {
     radius: 1.6,
@@ -106,7 +125,6 @@ export const OBSTACLES = {
     radius: 0.9,
     lineLength: 18,      // length of the fishing line (longer = slower swing)
     swingAngle: 0.65,    // how far it swings each way (radians)
-    dangerHeight: 2.2,   // only hits the bobber while lower than this
   },
   log: {
     length: 7,
@@ -145,6 +163,9 @@ export const COINS = {
   spawnAheadMax: 80,   // ...up to this far
   pickupRadius: 1.0,   // coin size for touching
   hoverHeight: 0.9,    // how high above the water coins float
+  airChance: 0.3,      // chance a coin floats up in the sky (fly up to grab it!)
+  airMinHeight: 4,
+  airMaxHeight: 7,
   goldenChance: 1 / 15, // chance a spawn is a Golden Lure instead of a coin
   obstacleClearance: 3, // coins never appear this close to an obstacle
 };
@@ -158,6 +179,7 @@ export const SCORING = {
   timeBonusPerSecond: 2,
   perLifeLeft: 100,
   missedCheckpoint: -25, // going around a checkpoint costs points
+  zap: 25,               // zapping an obstacle
   difficulty: 'normal',  // 'easy', 'normal' or 'hard' (default; the settings screen changes it)
   multiplier: { easy: 1, normal: 1.5, hard: 2 },
 };
@@ -309,6 +331,8 @@ export const COLORS = {
   goldenLure: 0xffe066,
   sparkle: 0xfff59d,
   wake: 0xffffff,
+  zap: 0x7df9ff,
+  zapGlow: 0x00b8d4,
   confetti: [0xff7a1a, 0x43d36b, 0x42a5f5, 0xffeb3b, 0xe53935, 0xffffff],
   sun: 0xfff1d6,
   hemiSky: 0xcfeeff,

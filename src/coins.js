@@ -66,10 +66,12 @@ export function createCoins(scene) {
       if (!isClear(x, z, COINS.obstacleClearance)) continue;
 
       const golden = Math.random() < COINS.goldenChance;
+      // Some coins float high in the sky, where only a flying bobber can reach them.
+      const airHeight = Math.random() < COINS.airChance ? rand(COINS.airMinHeight, COINS.airMaxHeight) : 0;
       const model = golden ? makeGoldenLureModel() : makeCoinModel();
       model.group.position.set(x, 0, z);
       scene.add(model.group);
-      coins.push({ ...model, x, z, golden, age: 0, spin: Math.random() * Math.PI * 2 });
+      coins.push({ ...model, x, z, golden, airHeight, age: 0, spin: Math.random() * Math.PI * 2 });
       return;
     }
   }
@@ -99,7 +101,8 @@ export function createCoins(scene) {
       // Spin and bob on the waves.
       c.spin += dt * 3;
       c.group.rotation.y = c.spin;
-      const y = getWaveHeight(c.x, c.z, time) + COINS.hoverHeight + Math.sin(time * 3 + c.spin) * 0.15;
+      const bob = Math.sin(time * 3 + c.spin) * 0.15;
+      const y = c.airHeight > 0 ? c.airHeight + bob : getWaveHeight(c.x, c.z, time) + COINS.hoverHeight + bob;
       c.group.position.y = y;
 
       // Fade out near the end of its life, then disappear.
@@ -111,9 +114,11 @@ export function createCoins(scene) {
         continue;
       }
 
-      // Picked up? (Circle collision on the water, like the obstacles.)
+      // Picked up? A 3D distance check (Pythagoras with x, y and z), so a coin in the
+      // sky can only be grabbed by flying up to it. (Up/down counts a bit less, ×0.7,
+      // to make grabbing easier.)
       // Coins far behind the player are removed too, since they'd never be reached.
-      const dist = Math.hypot(c.x - bobber.position.x, c.z - bobber.position.z);
+      const dist = Math.hypot(c.x - bobber.position.x, (y - bobber.mesh.position.y) * 0.7, c.z - bobber.position.z);
       if (canCollect && dist < COINS.pickupRadius + bobber.radius) {
         picked.push({ golden: c.golden, x: c.x, y, z: c.z });
         remove(i);

@@ -10,7 +10,7 @@
 //   'won'      – crossed the finish line
 //   'gameover' – ran out of lives
 
-import { GAME, SCORING } from './config.js';
+import { GAME, SCORING, BOBBER } from './config.js';
 
 export function createGame() {
   const game = {
@@ -22,7 +22,8 @@ export function createGame() {
     time: 0,            // race timer in seconds
     timerRunning: false, // starts when the bobber leaves the dock
     // Points so far, kept separately so we can show a breakdown at the end.
-    points: { coins: 0, goldenLures: 0, checkpoints: 0, penalties: 0 },
+    points: { coins: 0, goldenLures: 0, checkpoints: 0, penalties: 0, zaps: 0 },
+    zapCount: 0,
     coinCount: 0,
     goldenCount: 0,
 
@@ -35,7 +36,8 @@ export function createGame() {
       game.respawnTimer = 0;
       game.time = 0;
       game.timerRunning = false;
-      game.points = { coins: 0, goldenLures: 0, checkpoints: 0, penalties: 0 };
+      game.points = { coins: 0, goldenLures: 0, checkpoints: 0, penalties: 0, zaps: 0 };
+      game.zapCount = 0;
       game.coinCount = 0;
       game.goldenCount = 0;
     },
@@ -56,6 +58,11 @@ export function createGame() {
       game.points.checkpoints += SCORING.checkpoint;
       return SCORING.checkpoint;
     },
+    addZap() {
+      game.zapCount++;
+      game.points.zaps += SCORING.zap;
+      return SCORING.zap;
+    },
     addMissedCheckpoint() {
       game.points.penalties += SCORING.missedCheckpoint;
       return SCORING.missedCheckpoint;
@@ -65,7 +72,7 @@ export function createGame() {
     // It never shows below zero.
     currentScore() {
       const p = game.points;
-      return Math.max(0, p.coins + p.goldenLures + p.checkpoints + p.penalties);
+      return Math.max(0, p.coins + p.goldenLures + p.checkpoints + p.zaps + p.penalties);
     },
 
     // Works out the final score at the finish line, with every part listed.
@@ -81,6 +88,8 @@ export function createGame() {
         goldenLures: game.points.goldenLures,
         goldenCount: game.goldenCount,
         checkpoints: game.points.checkpoints,
+        zaps: game.points.zaps,
+        zapCount: game.zapCount,
         penalties: game.points.penalties,
         finish: SCORING.finish,
         timeBonus,
@@ -145,8 +154,11 @@ export function createGame() {
 // Collision check: is the bobber touching any of these circles?
 // Two circles touch when the distance between their centers is less than
 // the two radii added together. (Distance uses Pythagoras: √(dx² + dz²).)
+// Circles also have a height: if the bobber is far above or below one, it misses.
 export function bobberHitsAny(bobber, circles) {
+  const bobberY = bobber.height + BOBBER.floatOffset; // center of the bobber above the water
   for (const c of circles) {
+    if (c.y !== undefined && Math.abs(bobberY - c.y) > c.h + bobber.radius) continue;
     const dx = c.x - bobber.position.x;
     const dz = c.z - bobber.position.z;
     if (Math.sqrt(dx * dx + dz * dz) < c.r + bobber.radius) return true;

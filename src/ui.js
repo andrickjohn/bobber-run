@@ -81,6 +81,18 @@ export function createUI() {
   lives.className = 'lives';
   document.body.appendChild(lives);
 
+  // Flying energy bar, under the lives.
+  const energy = document.createElement('div');
+  energy.className = 'energy';
+  energy.innerHTML = `<span>⚡</span><div class="energy-track"><div class="energy-fill" id="energy-fill"></div></div>`;
+  document.body.appendChild(energy);
+
+  // Zaps left: a row of little glowing dots under the energy bar.
+  const ammo = document.createElement('div');
+  ammo.className = 'ammo';
+  document.body.appendChild(ammo);
+  let shownAmmo = -1;
+
   const toast = document.createElement('div');
   toast.className = 'toast hidden';
   document.body.appendChild(toast);
@@ -129,8 +141,8 @@ export function createUI() {
       showMenu(
         `<h1 class="big-title">Bobber Run</h1>
         <div class="big-byline">by Eliott</div>
-        <p class="howto">Steer with the mouse (or arrow keys). Pass all 4 checkpoints,
-          dodge the fish, grab coins and reach the finish!</p>
+        <p class="howto">Steer with the mouse (or arrow keys). Hold <b>Space</b> (or the mouse
+          button) to fly, and <b>F</b> (or right-click) to zap! Pass all 4 checkpoints, dodge the fish, grab coins and reach the finish.</p>
         <div class="menu-buttons">
           <button class="primary" data-action="play">▶ Play</button>
           <button data-action="settings">⚙ Settings</button>
@@ -245,6 +257,7 @@ export function createUI() {
         ${row(`Coins (${b.coinCount})`, b.coins)}
         ${row(`Golden Lures (${b.goldenCount})`, b.goldenLures)}
         ${row('Checkpoints', b.checkpoints)}
+        ${b.zapCount ? row(`Zapped (${b.zapCount})`, b.zaps) : ''}
         ${b.penalties ? row('Missed checkpoints', b.penalties) : ''}
         ${row('Finish', b.finish)}
         ${row(`Time bonus (${formatTime(b.seconds)})`, b.timeBonus)}
@@ -253,6 +266,18 @@ export function createUI() {
         ${row('Difficulty multiplier', '×' + b.multiplier)}
         ${row('Total', b.total, 'total')}
       </table>`;
+    },
+    // fraction: 1 = full energy, 0 = empty. "low" makes it red (not enough to take off).
+    setEnergy(fraction, low) {
+      const fill = document.getElementById('energy-fill');
+      fill.style.width = Math.round(fraction * 100) + '%';
+      fill.classList.toggle('low', low);
+    },
+    setAmmo(left, max) {
+      if (left === shownAmmo) return; // only redraw when it changes
+      shownAmmo = left;
+      ammo.innerHTML = '<span class="ammo-label">🎯</span>' +
+        Array.from({ length: max }, (_, i) => `<span class="zap-dot ${i < left ? '' : 'empty'}"></span>`).join('');
     },
     setScore(value) {
       document.getElementById('score-value').textContent = value;

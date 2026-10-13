@@ -20,6 +20,8 @@
 //
 // Collisions treat everything as circles on the flat water (X/Z), which is easy math:
 // two circles touch when the distance between their centers is less than r1 + r2.
+// Each circle also has a height y and a half-thickness h, so things up in the air
+// only hit a bobber that's up in the air too.
 
 import * as THREE from 'three';
 import { OBSTACLES, LAKE, COLORS } from './config.js';
@@ -178,11 +180,11 @@ function makeBass(homeX, z) {
     pivot.rotation.x = -Math.atan(slope);
   }
 
-  // Only dangerous while jumping AND low enough to hit a bobber floating on the water.
-  // High in the middle of the arc, you can slip right underneath it!
+  // Only dangerous while jumping. The circle has a height (y), so a bobber on the water
+  // can slip right underneath it at the top of its arc... and a flying bobber can't!
   function hitCircles() {
-    if (!jumping || group.position.y > c.dangerHeight) return [];
-    return [{ x: group.position.x, z, r: c.radius }];
+    if (!jumping) return [];
+    return [{ x: group.position.x, z, r: c.radius, y: group.position.y, h: 0.8 }];
   }
 
   // The whole stretch of water the bass leaps across (used to keep coins away).
@@ -228,7 +230,7 @@ function makePike(x, z, circleAround = null) {
   }
 
   function hitCircles() {
-    return [{ x: pos.x, z: pos.z, r: c.radius }];
+    return [{ x: pos.x, z: pos.z, r: c.radius, y: 0, h: 0.7 }];
   }
 
   return { type: 'pike', deadly: true, group, update, hitCircles };
@@ -293,7 +295,7 @@ function makeTurtle(x, z) {
   }
 
   function hitCircles() {
-    return [{ x: pos.x, z: pos.z, r: c.radius }];
+    return [{ x: pos.x, z: pos.z, r: c.radius, y: 0, h: 0.8 }];
   }
 
   return { type: 'turtle', deadly: true, group, update, hitCircles };
@@ -349,10 +351,10 @@ function makeLure(x, z) {
     lureY = anchorY - L * Math.cos(angle) - 0.5;
   }
 
-  // Only dangerous near the bottom of the swing, where it skims the water.
+  // The lure's circle moves up and down with the swing: near the bottom it skims the
+  // water, at the ends of the swing it's up in the air where flying bobbers are.
   function hitCircles() {
-    if (lureY > c.dangerHeight) return [];
-    return [{ x: lureX, z, r: c.radius }];
+    return [{ x: lureX, z, r: c.radius, y: lureY, h: 1.0 }];
   }
 
   // The whole width of the swing (used to keep coins away).
@@ -409,9 +411,9 @@ function makeLog(x, z) {
     const ax = Math.cos(angle) * step;
     const az = -Math.sin(angle) * step;
     return [
-      { x: posX - ax, z: z - az, r },
-      { x: posX, z, r },
-      { x: posX + ax, z: z + az, r },
+      { x: posX - ax, z: z - az, r, y: 0.1, h: 0.9 },
+      { x: posX, z, r, y: 0.1, h: 0.9 },
+      { x: posX + ax, z: z + az, r, y: 0.1, h: 0.9 },
     ];
   }
 
@@ -456,6 +458,7 @@ function makeLilyPatch(x, z) {
 
   // Inside the patch? Then the water is "thicker": lose extra speed every second.
   function affect(bobber, dt) {
+    if (!bobber.onWater) return; // flying over the pads doesn't slow you down
     const d = Math.hypot(bobber.position.x - x, bobber.position.z - z);
     if (d < c.patchRadius) bobber.velocity.multiplyScalar(Math.exp(-c.drag * dt));
   }
@@ -500,6 +503,7 @@ function makeWhirlpool(x, z) {
   // Pull the bobber toward the center, stronger the closer it is.
   // Also push it sideways (at right angles to the pull) so it swirls around.
   function affect(bobber, dt) {
+    if (!bobber.onWater) return; // you can fly right over a whirlpool
     const dx = x - bobber.position.x;
     const dz = z - bobber.position.z;
     const d = Math.hypot(dx, dz);
@@ -632,6 +636,25 @@ export function createObstacles(scene) {
     return circles;
   }
 
+  // A zap at (x, y, z) with radius r: knocks out the first dangerous obstacle it touches.
+  // Uses the same height-aware circles as collisions. Returns where it was (or null).
+  function zap(x, y, z, r) {
+    for (let i = 0; i < list.length; i++) {
+      const o = list[i];
+      if (!o.deadly) continue;
+      for (const c of o.hitCircles()) {
+        const closeEnough = Math.hypot(c.x - x, c.z - z) < c.r + r;
+        const rightHeight = c.y === undefined || Math.abs(c.y - y) < c.h + r;
+        if (closeEnough && rightHeight) {
+          scene.remove(o.group);
+          list.splice(i, 1);
+          return { type: o.type, x: c.x, y: c.y ?? 0, z: c.z };
+        }
+      }
+    }
+    return null;
+  }
+
   // Is the spot (x, z) at least "clearance" away from every obstacle?
   // Obstacles that sweep over an area (bass, lure, lily pads, whirlpools) use that whole
   // area; the others use where they are right now.
@@ -645,5 +668,5 @@ export function createObstacles(scene) {
     return true;
   }
 
-  return { build, update, getHitCircles, isClear, get list() { return list; } };
+  return { build, update, getHitCircles, isClear, zap, get list() { return list; } };
 }
