@@ -102,6 +102,18 @@ export const PORTAL = {
   spinSpeed: 1.6,      // how fast the swirl spins
 };
 
+// The black hole below Space Lakes (fall into a gap and it swallows you!)
+export const BLACK_HOLE = {
+  x: 0,                // where it is: under the middle of the course, far below
+  y: -230,
+  z: -220,
+  coreRadius: 22,      // the black ball in the middle
+  diskRadius: 150,     // the glowing swirl around it
+  fallTime: 3.8,       // seconds of spiraling in before you lose the life
+  turns: 3,            // how many times you circle the hole on the way down
+  junkCount: 40,       // pieces of space junk swirling in with you
+};
+
 // The hyperspace jump between worlds
 export const HYPERSPACE = {
   countdown: 5,        // seconds the score screen shows before warping automatically
@@ -117,6 +129,7 @@ export const HYPERSPACE = {
 //   checkpointZ   – where the 4 gates go (null = spread evenly)
 //   bend / widthWiggle – how curvy the lake is
 //   width         – (optional) how wide the lakes are; LAKE.width if left out
+//   drag          – (optional) water drag; lower = more slippery (BOBBER.drag if left out)
 // Gaps between lakes have no water: you have to FLY across. Fall in and you lose a life!
 // ---------------------------------------------------------------------------
 export const LEVELS = [
@@ -158,6 +171,16 @@ export const LEVELS = [
     width: 62,      // narrower pools, so steering matters more
     bend: 14,
     widthWiggle: 6,
+  },
+  {
+    name: 'Aurora Fjord',
+    theme: 'ice',
+    lakes: [{ start: 40, end: -430 }],
+    checkpointZ: null,
+    finishZ: -400,
+    bend: 18,       // the curviest lake yet
+    widthWiggle: 14,
+    drag: 0.6,      // icy, slippery water: the bobber slides much farther (normal is BOBBER.drag)
   },
 ];
 
@@ -234,6 +257,31 @@ export const THEMES = {
     islands: true,
     decor: 'lava',     // lava sea, volcanoes and rising embers
     fallMessage: 'Into the lava!',
+  },
+  ice: {
+    sky: 0x07102a,
+    fog: 0x16264a,
+    fogNear: 70,
+    fogFar: 320,
+    sun: 0xbcd4ff,     // cool moonlight
+    sunIntensity: 1.4,
+    hemiSky: 0x8fb6ff,
+    hemiGround: 0x2a3550,
+    hemiIntensity: 1.2,
+    water: 0x1d4f7a,   // deep, icy blue
+    wetSand: 0x6b7f8f,
+    sand: 0xdde7f0,    // snowy shore
+    grass: 0xf2f6fb,   // snow
+    grassDark: 0xc4d3e6, // snow in blue shadow
+    rock: 0x7d8a99,
+    portal: 0x4dffb5,
+    portalGlow: 0xc2a8ff,
+    wildlife: false,
+    islands: false,
+    reeds: false,      // too cold for cattails
+    snowyTrees: true,  // pines with snow on top
+    decor: 'aurora',   // northern lights, stars, moon and falling snow
+    fallMessage: 'Splash!',
   },
 };
 

@@ -19,6 +19,7 @@ let muted = false;
 let ambientOut = null; // volume knob for all the lake sounds
 let ambientTheme = 'lake'; // 'lake' = water and frogs, 'space' = cosmic hum, 'lava' = rumble
 let lavaRumble = null;   // the lava rumble's volume knob
+let iceWind = null;      // the icy wind's volume knob
 let spaceHum = null;     // the hum's volume knob (made the first time it's needed)
 let noise = null;      // a couple of seconds of random hiss, reused for splashy sounds
 
@@ -29,7 +30,7 @@ function unlock() {
     ctx = new AudioContextClass();
     master = ctx.createGain();
     master.gain.value = muted ? 0 : 1;
-    master.connect(master);
+    master.connect(ctx.destination); // ...and the main knob goes to the speakers
     noise = makeNoise(3);
     startLakeSounds();
   }
@@ -194,6 +195,7 @@ function startLakeSounds() {
   repeatRandomly(playLap, 1.2, 3.5, 'lake');
   repeatRandomly(playBloop, 1.5, 5, 'lake');
   repeatRandomly(playCrackle, 0.3, 1.6, 'lava');
+  repeatRandomly(playIceChime, 2, 6, 'ice');
   setAmbientTheme(ambientTheme);
 }
 
@@ -261,12 +263,54 @@ function playCrackle() {
   src.start(t, rand(0, noise.duration - 0.2), length + 0.02);
 }
 
-// Switch the background sounds to match the level: 'lake', 'space' or 'lava'.
+// Icy wind: noise through a filter that slowly sweeps up and down, like wind howling
+// over the snow.
+function startIceWind() {
+  iceWind = ctx.createGain();
+  iceWind.gain.value = 0;
+  const src = ctx.createBufferSource();
+  src.buffer = noise;
+  src.loop = true;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.Q.value = 3;
+  filter.frequency.value = 500;
+  const lfo = ctx.createOscillator();
+  lfo.frequency.value = 0.1;
+  const lfoDepth = ctx.createGain();
+  lfoDepth.gain.value = 300;
+  lfo.connect(lfoDepth).connect(filter.frequency);
+  lfo.start();
+  src.connect(filter).connect(iceWind).connect(ambientOut);
+  src.start();
+}
+
+// A tinkly ice chime: two high bell notes, like icicles bumping together.
+function playIceChime() {
+  const base = rand(1800, 2600);
+  for (const [delay, mult] of [[0, 1], [rand(0.08, 0.2), 1.5]]) {
+    const t = ctx.currentTime + delay;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = base * mult;
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.03, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+    osc.connect(gain).connect(ambientOut);
+    osc.start(t);
+    osc.stop(t + 0.9);
+  }
+}
+
+// Switch the background sounds to match the level: 'lake', 'space', 'lava' or 'ice'.
 export function setAmbientTheme(theme) {
   ambientTheme = theme;
   if (!ctx || !ambientOut) return; // sound hasn't started yet; it'll use this theme when it does
   if (theme === 'space' && !spaceHum) startSpaceHum();
   if (theme === 'lava' && !lavaRumble) startLavaRumble();
+  if (theme === 'ice' && !iceWind) startIceWind();
+  if (iceWind) iceWind.gain.setTargetAtTime(theme === 'ice' ? 0.6 : 0, ctx.currentTime, 0.5);
   if (spaceHum) spaceHum.gain.setTargetAtTime(theme === 'space' ? 0.08 : 0, ctx.currentTime, 0.5);
   if (lavaRumble) lavaRumble.gain.setTargetAtTime(theme === 'lava' ? 0.5 : 0, ctx.currentTime, 0.5);
 }
@@ -520,4 +564,51 @@ export function playHyperspace(seconds) {
   boom.connect(bg).connect(master);
   boom.start(t + seconds);
   boom.stop(t + seconds + 1.5);
+}
+
+// Falling into the black hole: a deep drone that bends lower and lower, a swirling
+// whoosh that speeds up, and a final "gulp" when you're swallowed.
+export function playBlackHole(seconds) {
+  if (!ctx || ctx.state !== 'running' || !noise) return;
+  const t = ctx.currentTime;
+  const v = AUDIO.effectsVolume;
+  // Deep drone sliding down
+  const drone = ctx.createOscillator();
+  const dg = ctx.createGain();
+  drone.type = 'sawtooth';
+  drone.frequency.setValueAtTime(140, t);
+  drone.frequency.exponentialRampToValueAtTime(30, t + seconds);
+  const lowpass = ctx.createBiquadFilter();
+  lowpass.type = 'lowpass';
+  lowpass.frequency.value = 500;
+  dg.gain.setValueAtTime(0.0001, t);
+  dg.gain.exponentialRampToValueAtTime(0.18 * v + 0.0001, t + 0.4);
+  dg.gain.exponentialRampToValueAtTime(0.0001, t + seconds + 0.3);
+  drone.connect(lowpass).connect(dg).connect(master);
+  drone.start(t);
+  drone.stop(t + seconds + 0.4);
+  // Swirling whoosh: noise whose volume wobbles faster and faster (like circling round)
+  const src = ctx.createBufferSource();
+  src.buffer = noise;
+  src.loop = true;
+  const band = ctx.createBiquadFilter();
+  band.type = 'bandpass';
+  band.frequency.setValueAtTime(1500, t);
+  band.frequency.exponentialRampToValueAtTime(200, t + seconds);
+  const wg = ctx.createGain();
+  wg.gain.value = 0.12 * v;
+  const wobble = ctx.createOscillator();
+  wobble.frequency.setValueAtTime(1, t);
+  wobble.frequency.exponentialRampToValueAtTime(14, t + seconds);
+  const wobbleDepth = ctx.createGain();
+  wobbleDepth.gain.value = 0.1 * v;
+  wobble.connect(wobbleDepth).connect(wg.gain);
+  src.connect(band).connect(wg).connect(master);
+  src.start(t);
+  wobble.start(t);
+  src.stop(t + seconds);
+  wobble.stop(t + seconds);
+  // Gulp!
+  tone(90, seconds, 0.5, 'sine', 0.4);
+  tone(55, seconds + 0.08, 0.6, 'sine', 0.35);
 }

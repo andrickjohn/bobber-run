@@ -14,6 +14,7 @@
 import * as THREE from 'three';
 import { LAKE, DOCK, SHORE, COURSE, PORTAL, LEVELS, THEMES, COLORS, MOBILE } from './config.js';
 import { isTouchDevice } from './device.js';
+import { createBlackHole } from './blackhole.js';
 
 // Size of the squares in the water and land meshes (bigger on phones = faster).
 const WATER_CELL = isTouchDevice ? MOBILE.waterCellSize : LAKE.waterCellSize;
@@ -173,7 +174,8 @@ export function createWorld(scene) {
   // Water: one sheet per lake. Each knows which of its points are really lake
   // (the rest are tucked away under the land).
   const waters = [];
-  let decor = null; // sky decorations for island worlds (some of them move)
+  let decor = null; // sky decorations (some of them move)
+  let blackHole = null; // only in space
   const lakesToFill = theme.islands ? level.lakes : [null]; // null = one sheet for the whole level
   for (const lake of lakesToFill) {
     const water = createWater(theme, lake);
@@ -184,15 +186,27 @@ export function createWorld(scene) {
   if (theme.islands) {
     for (const lake of level.lakes) root.add(createIsland(theme, lake));
     root.add(createCrystals(theme));
-    decor = theme.decor === 'lava' ? createLavaSky(theme) : { group: createSpaceSky(), update() {} };
+    if (theme.decor === 'lava') {
+      decor = createLavaSky(theme);
+    } else {
+      // Space: stars and planets, plus the black hole waiting below the gaps.
+      blackHole = createBlackHole();
+      const sky = createSpaceSky();
+      sky.add(blackHole.group);
+      decor = { group: sky, update: (time) => blackHole.update(time) };
+    }
     root.add(decor.group);
     root.add(createSpaceStartLine(theme));
   } else {
     root.add(createTerrain(theme));
     root.add(createDock());
-    root.add(createTrees());
-    root.add(createReeds());
+    root.add(createTrees(theme));
+    if (theme.reeds !== false) root.add(createReeds());
     root.add(createStartLine());
+    if (theme.decor === 'aurora') {
+      decor = createAuroraSky();
+      root.add(decor.group);
+    }
   }
   root.add(createRocks(theme));
   const portal = createPortal(theme);
@@ -218,7 +232,7 @@ export function createWorld(scene) {
     });
   }
 
-  return { update, dispose };
+  return { update, dispose, blackHole };
 }
 
 // ---------------------------------------------------------------------------
@@ -515,6 +529,109 @@ function createLavaSky(theme) {
   return { group, update };
 }
 
+// ---------------------------------------------------------------------------
+// Aurora world: northern lights rippling across the sky, stars, a moon, falling snow
+// ---------------------------------------------------------------------------
+
+// A soft vertical glow for the aurora curtains: bright green at the bottom,
+// fading through purple to nothing at the top.
+function makeAuroraTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 4;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  const g = ctx.createLinearGradient(0, 128, 0, 0);
+  g.addColorStop(0, 'rgba(80,255,170,0)');
+  g.addColorStop(0.1, 'rgba(80,255,170,0.9)');
+  g.addColorStop(0.5, 'rgba(120,200,255,0.5)');
+  g.addColorStop(0.8, 'rgba(190,120,255,0.25)');
+  g.addColorStop(1, 'rgba(190,120,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 4, 128);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function createAuroraSky() {
+  const group = new THREE.Group();
+
+  // Stars (the same kind of star field as space, but fewer).
+  const starCount = 900;
+  const starPos = new Float32Array(starCount * 3);
+  for (let i = 0; i < starCount; i++) {
+    const around = Math.random() * Math.PI * 2;
+    const up = Math.acos(Math.random()); // only the top half of the sky
+    starPos[i * 3] = 700 * Math.sin(up) * Math.cos(around);
+    starPos[i * 3 + 1] = 700 * Math.cos(up);
+    starPos[i * 3 + 2] = 700 * Math.sin(up) * Math.sin(around) - 200;
+  }
+  const starGeo = new THREE.BufferGeometry();
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+  group.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false, fog: false })));
+
+  // A big pale moon.
+  const moon = new THREE.Mesh(new THREE.SphereGeometry(40, 24, 12), new THREE.MeshBasicMaterial({ color: 0xeef3ff, fog: false }));
+  moon.position.set(260, 220, -700);
+  group.add(moon);
+
+  // Aurora curtains: long wavy ribbons high in the sky. Each frame their points sway
+  // with sine waves, so the lights ripple like real northern lights.
+  const texture = makeAuroraTexture();
+  const curtains = [];
+  for (let i = 0; i < 4; i++) {
+    const geo = new THREE.PlaneGeometry(900, 140, 60, 1);
+    const mat = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      opacity: 0.7,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false,
+    });
+    const curtain = new THREE.Mesh(geo, mat);
+    curtain.position.set(THREE.MathUtils.randFloatSpread(200), 170 + i * 25, -350 - i * 120);
+    curtain.rotation.y = THREE.MathUtils.randFloatSpread(0.6);
+    group.add(curtain);
+    curtains.push({ curtain, baseX: Float32Array.from(geo.attributes.position.array.filter((_, k) => k % 3 === 0)), phase: Math.random() * 10 });
+  }
+
+  // Falling snow: little white specks drifting down and sideways.
+  const flakeCount = 1200;
+  const flakePos = new Float32Array(flakeCount * 3);
+  const flakeStart = new Float32Array(flakeCount);
+  for (let i = 0; i < flakeCount; i++) {
+    flakePos[i * 3] = THREE.MathUtils.randFloatSpread(200);
+    flakePos[i * 3 + 2] = THREE.MathUtils.randFloat(-460, 60);
+    flakeStart[i] = Math.random() * 60;
+  }
+  const flakeGeo = new THREE.BufferGeometry();
+  flakeGeo.setAttribute('position', new THREE.BufferAttribute(flakePos, 3));
+  group.add(new THREE.Points(flakeGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.35, transparent: true, opacity: 0.9 })));
+
+  function update(time) {
+    // Sway each curtain: every point moves forward/back by a sine wave along the ribbon.
+    for (const c of curtains) {
+      const p = c.curtain.geometry.attributes.position;
+      for (let k = 0; k < p.count; k++) {
+        const x = c.baseX[k];
+        p.setZ(k, Math.sin(x * 0.012 + time * 0.6 + c.phase) * 40 + Math.sin(x * 0.03 - time * 0.9) * 12);
+      }
+      p.needsUpdate = true;
+      c.curtain.material.opacity = 0.55 + Math.sin(time * 0.5 + c.phase) * 0.2;
+    }
+    // Snow falls from 60 high down to the water, then starts again at the top.
+    for (let i = 0; i < flakeCount; i++) {
+      flakePos[i * 3 + 1] = 60 - ((flakeStart[i] + time * 3) % 60);
+      flakePos[i * 3] += Math.sin(time + i) * 0.01; // a gentle sideways drift
+    }
+    flakeGeo.attributes.position.needsUpdate = true;
+  }
+
+  return { group, update };
+}
+
 // Glowing crystals growing on the island rims (instead of trees).
 function createCrystals(theme) {
   const group = new THREE.Group();
@@ -792,10 +909,13 @@ function randomSpotNearShore(minD, maxD) {
   return { x: 0, z: bounds.maxZ + 60 };
 }
 
-function createTrees() {
+function createTrees(theme) {
   const group = new THREE.Group();
   const trunkGeo = new THREE.CylinderGeometry(0.4, 0.5, 3, 6);
   const leafGeo = new THREE.ConeGeometry(2.2, 6, 7);
+  // Snowy pines get a white cone of snow on top.
+  const snowGeo = new THREE.ConeGeometry(1.3, 2.6, 7);
+  const snowMat = new THREE.MeshStandardMaterial({ color: 0xf6faff, flatShading: true });
   const trunkMat = new THREE.MeshStandardMaterial({ color: COLORS.trunk, flatShading: true });
   const leafMats = [
     new THREE.MeshStandardMaterial({ color: COLORS.leaves, flatShading: true }),
@@ -813,6 +933,12 @@ function createTrees() {
     trunk.castShadow = true;
     leaves.castShadow = true;
     tree.add(trunk, leaves);
+    if (theme.snowyTrees) {
+      const snow = new THREE.Mesh(snowGeo, snowMat);
+      snow.position.y = 7.4;
+      snow.castShadow = true;
+      tree.add(snow);
+    }
     tree.position.set(x, getTerrainHeight(x, z) - 0.2, z);
     tree.scale.setScalar(scale);
     tree.rotation.y = Math.random() * Math.PI;

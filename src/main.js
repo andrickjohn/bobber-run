@@ -6,7 +6,7 @@
 // (about 60 times a second).
 
 import * as THREE from 'three';
-import { CAMERA, BOBBER, OBSTACLES, EFFECTS, FLY, SHOOT, PORTAL, LEVELS, HYPERSPACE } from './config.js';
+import { CAMERA, BOBBER, OBSTACLES, EFFECTS, FLY, SHOOT, PORTAL, LEVELS, HYPERSPACE, BLACK_HOLE } from './config.js';
 import { createScene, getChaseCameraPose } from './scene.js';
 import { createWorld, lakeCenterX, setLevel, getLevel, getTheme } from './world.js';
 import { createBobber } from './bobber.js';
@@ -20,7 +20,7 @@ import { createShooter } from './shooting.js';
 import { createHyperspace } from './hyperspace.js';
 import { createUI } from './ui.js';
 import { loadSettings, saveSettings, applySettings, loadBestScores, recordScore } from './settings.js';
-import { playChime, playFanfare, playBuzz, playSplash, playGameOver, playDing, playGoldenDing, setMuted, setThrust, playPlop, playZap, playPoof, playFall, setAmbientTheme, playReload, setPortalHum, playHyperspace } from './audio.js';
+import { playChime, playFanfare, playBuzz, playSplash, playGameOver, playDing, playGoldenDing, setMuted, setThrust, playPlop, playZap, playPoof, playFall, setAmbientTheme, playReload, setPortalHum, playHyperspace, playBlackHole } from './audio.js';
 
 const canvas = document.getElementById('game');
 const { renderer, scene, camera, followWithSun, applyTheme } = createScene(canvas);
@@ -122,7 +122,7 @@ function beginLevel() {
 
 // R / Restart: start this level over (with the lives you had when it began).
 function restartLevel() {
-  if (game.state === 'title' || game.state === 'warping') return;
+  if (game.state === 'title' || game.state === 'warping' || game.state === 'blackhole') return;
   clearInterval(countdownTimer);
   game.lives = livesAtLevelStart;
   game.reset();
@@ -427,7 +427,64 @@ function checkForHits() {
   loseALife('Splash!');
 }
 
-// Fell into a gap between space lakes.
+// ---------------------------------------------------------------------------
+// The black hole (Space Lakes): fall into a gap and spiral down into it
+// ---------------------------------------------------------------------------
+let holeFall = null; // the fall in progress (null when not falling in)
+
+function startBlackHoleFall() {
+  game.state = 'blackhole';
+  bobber.setControlsEnabled(false);
+  ui.setWarpMode(true); // hide the HUD: it's a movie moment
+  playBlackHole(BLACK_HOLE.fallTime);
+  holeFall = { t: 0, start: world.blackHole.startFall(scene, bobber.mesh.position), flashed: false };
+}
+
+const holeAway = new THREE.Vector3();
+const holeLook = new THREE.Vector3();
+function updateBlackHoleFall(dt) {
+  holeFall.t += dt;
+  const p = Math.min(1, holeFall.t / BLACK_HOLE.fallTime); // 0 → 1 over the whole fall
+  const hole = world.blackHole.center;
+
+  // The bobber follows its spiral, tumbling faster and shrinking at the very end.
+  const spot = world.blackHole.updateFall(dt, p, holeFall.start);
+  bobber.mesh.position.copy(spot);
+  bobber.mesh.rotation.x += dt * (3 + 14 * p);
+  bobber.mesh.rotation.z += dt * (2 + 10 * p);
+  bobber.mesh.scale.setScalar(Math.max(0.05, 1 - p * p * p));
+
+  // The camera chases the bobber from just outside its spiral (the direction pointing
+  // away from the hole), getting closer as it falls, and looks past it into the hole.
+  holeAway.set(spot.x - hole.x, 0, spot.z - hole.z);
+  if (holeAway.lengthSq() < 1) holeAway.set(0, 0, 1);
+  holeAway.normalize();
+  wantedPosition.copy(spot).addScaledVector(holeAway, 13 - 6 * p);
+  wantedPosition.y += 8 - 4 * p;
+  camera.position.lerp(wantedPosition, 1 - Math.exp(-12 * dt));
+  holeLook.copy(spot).lerp(hole, 0.2 + 0.4 * p);
+  camera.lookAt(holeLook);
+  camera.fov = camera.userData.baseFov + 30 * p; // the view stretches as you're pulled in
+  camera.updateProjectionMatrix();
+  ui.setWarpTint(p * 0.7);
+
+  // Swallowed: flash, then lose a life (and respawn at the last checkpoint).
+  if (p >= 1 && !holeFall.flashed) {
+    holeFall.flashed = true;
+    ui.flash(() => {
+      world.blackHole.endFall();
+      holeFall = null;
+      camera.fov = camera.userData.baseFov;
+      camera.updateProjectionMatrix();
+      ui.setWarpTint(0);
+      ui.setWarpMode(false);
+      game.state = 'playing';
+      loseALife('Swallowed by a black hole!');
+    });
+  }
+}
+
+// Fell into a gap between lakes (in worlds without a black hole).
 function fellIntoSpace() {
   if (game.state !== 'playing' || game.isRespawning()) return;
   playFall();
@@ -513,6 +570,13 @@ let lastFrameTime = performance.now();
 // Moves the whole game forward by dt seconds.
 function step(dt) {
   if (game.state === 'paused') return;
+  if (game.state === 'blackhole') {
+    gameTime += dt;
+    world.update(gameTime);
+    effects.update(dt, gameTime, bobber, false);
+    if (holeFall) updateBlackHoleFall(dt);
+    return;
+  }
   if (game.state === 'warping') {
     // During hyperspace only the scenery moves; the warp controls the camera.
     gameTime += dt;
@@ -536,6 +600,11 @@ function step(dt) {
 
   previousPosition.copy(bobber.position); // remember where we were, to detect crossing lines
   const flightEvent = bobber.update(dt, time);
+  // Falling into a gap in Space Lakes: the black hole pulls you in!
+  if (world.blackHole && bobber.flight.falling && game.state === 'playing' && !game.isRespawning()) {
+    startBlackHoleFall();
+    return;
+  }
   if (flightEvent && flightEvent.fell) fellIntoSpace();
   if (flightEvent && flightEvent.landed && game.state === 'playing') {
     // Splashing down after a flight

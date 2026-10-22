@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import { BOBBER, FLY, SHOOT, COLORS } from './config.js';
 import { getChaseCameraPose } from './scene.js';
-import { getWaveHeight, getLakeEdges, getWaterBounds, isOverLake, getLakeAt } from './world.js';
+import { getWaveHeight, getLakeEdges, getWaterBounds, isOverLake, getLakeAt, getLevel } from './world.js';
 
 export function createBobber(scene, camera, canvas) {
   // ----- The 3D model -----
@@ -298,7 +298,9 @@ export function createBobber(scene, camera, canvas) {
 
     // Water drag: lose a fraction of speed every second, so it glides to a stop.
     // Math.exp makes this work the same no matter the frame rate.
-    velocity.multiplyScalar(Math.exp(-BOBBER.drag * dt));
+    // Some levels have their own drag (icy water is slippery: less drag, longer slides).
+    const drag = getLevel().drag ?? BOBBER.drag;
+    velocity.multiplyScalar(Math.exp(-drag * dt));
 
     // Never go faster than the top speed.
     if (velocity.length() > maxSpeed) velocity.setLength(maxSpeed);
@@ -371,6 +373,7 @@ export function createBobber(scene, camera, canvas) {
     flight.flying = false;
     flight.mustLetGo = false;
     flight.falling = false;
+    mesh.scale.setScalar(1); // (a black hole may have shrunk it)
   }
 
   // Which way to shoot (a direction of length 1, written into "out").
