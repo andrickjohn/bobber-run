@@ -77,6 +77,58 @@
       .big-number { font-size: 36px !important; font-weight: 800; margin: 4px 0 !important; }
       .big-number span { font-size: 16px; font-weight: 600; }
       .new-best { color: #e65100; font-weight: 800; font-size: 22px; animation: pulse 0.6s infinite alternate; }
+      /* ----- Title screen: info + PLAY on the left, the Tackle Box toy on the right ----- */
+      .menu.title-menu {
+        width: min(900px, calc(100vw - 32px)); display: grid; grid-template-columns: 1fr 1.1fr;
+        gap: 22px; align-items: stretch; padding: 22px;
+        background: linear-gradient(160deg, rgba(255,255,255,0.97), rgba(225,246,250,0.96));
+      }
+      .title-left { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+      .logo { display: flex; align-items: center; gap: 12px; }
+      .logo .big-title { margin: 0 !important; line-height: 1; text-shadow: 0 3px 0 #c45500; }
+      /* A little bobber that bobs up and down next to the title */
+      .logo-bobber {
+        position: relative; width: 44px; height: 44px; border-radius: 50%; flex: none;
+        background: linear-gradient(#e53935 50%, #fff 50%); box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+        animation: bob 1.6s ease-in-out infinite;
+      }
+      .logo-bobber::before {
+        content: ''; position: absolute; left: 50%; top: -16px; width: 4px; height: 18px; margin-left: -2px;
+        background: #fff; border-radius: 2px; box-shadow: 0 -3px 0 1px #fbc02d;
+      }
+      @keyframes bob { 0%, 100% { transform: translateY(0) rotate(-6deg); } 50% { transform: translateY(-8px) rotate(6deg); } }
+      /* The big PLAY button gently pulses so it's impossible to miss */
+      .menu .play-button {
+        font-size: 30px; font-weight: 900; letter-spacing: 2px; padding: 14px 54px; margin: 8px 0 4px;
+        border: none; border-radius: 999px; color: #fff;
+        background: linear-gradient(180deg, #ffa040, #ff6a00);
+        box-shadow: 0 6px 0 #c45500, 0 10px 20px rgba(255,106,0,0.35);
+        animation: pulse-play 1.4s ease-in-out infinite;
+      }
+      .menu .play-button:hover { background: linear-gradient(180deg, #ffb05c, #ff7a1a); }
+      .menu .play-button:active { transform: translateY(4px); box-shadow: 0 2px 0 #c45500; }
+      @keyframes pulse-play { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+      .title-footer { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+      .menu .small-button { font-size: 15px; padding: 6px 14px; }
+      .title-right { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+      .toy-label { font-size: 16px; }
+      .toy-label span { display: block; font-size: 13px; opacity: 0.7; }
+      #tackle-box { width: 100%; flex: 1; min-height: 340px; display: block; touch-action: none; cursor: pointer; }
+      /* Phones and narrow windows: stack the two halves */
+      @media (max-width: 720px) {
+        .menu.title-menu { grid-template-columns: 1fr; gap: 8px; padding: 12px; }
+        .title-menu .big-title { font-size: 38px !important; }
+        .title-menu .logo-bobber { width: 30px; height: 30px; }
+        .title-menu .big-byline { margin-bottom: 0; }
+        .title-menu .howto { font-size: 14px !important; margin: 2px 0; }
+        .title-menu .note, .title-menu .bests { display: none; }
+        .title-menu .level-picker { margin-top: 2px; font-size: 13px; }
+        .title-menu .level-picker .choice { font-size: 13px; padding: 5px 4px; }
+        .title-menu .title-footer { margin-top: 2px; }
+        #tackle-box { min-height: 270px; }
+        .menu .play-button { font-size: 24px; padding: 10px 40px; margin: 4px 0; }
+      }
+
       /* Short windows: squeeze the menus so they fit without scrolling */
       @media (max-height: 600px) {
         .menu { padding: 14px 20px; }
@@ -222,6 +274,11 @@
       /* Phone held sideways: very short screen. Smaller touch buttons, HUD back on top. */
       @media (max-height: 500px) {
         .menu { padding: 10px 18px; }
+        .menu.title-menu { padding: 10px 14px; gap: 12px; }
+        .title-left .bests, .title-left .note { display: none; }
+        #tackle-box { min-height: 0; }
+        .menu .play-button { font-size: 22px; padding: 8px 36px; margin: 4px 0; }
+        .logo-bobber { width: 30px; height: 30px; }
         .big-title { font-size: 30px !important; }
         .big-byline { font-size: 13px; margin-bottom: 4px; }
         .howto { font-size: 13px !important; }

@@ -10,6 +10,7 @@
 import { formatTime } from './game.js';
 import { DIFFICULTY, SETTINGS_LIMITS } from './config.js';
 import { isTouchDevice } from './device.js';
+import { createTackleBox } from './tacklebox.js';
 
 export function createUI() {
   // ----- Announcing actions to main.js -----
@@ -168,7 +169,15 @@ export function createUI() {
   });
 
   // Puts new HTML in the menu panel and shows it.
+  // The Tackle Box toy on the title screen (only running while the title is showing).
+  let toy = null;
+  function stopToy() {
+    if (toy) toy.stop();
+    toy = null;
+  }
+
   function showMenu(html, className = '') {
+    stopToy();
     menu.className = 'menu ' + className;
     menu.innerHTML = html;
   }
@@ -192,26 +201,36 @@ export function createUI() {
       const levelButtons = levels
         .map((lvl, i) => `<button class="choice" data-action="playLevel" data-value="${i}">${i + 1}. ${lvl.name}</button>`)
         .join('');
+      const touch = document.body.classList.contains('touch');
       showMenu(
-        `<h1 class="big-title">Bobber Run</h1>
-        <div class="big-byline">by Eliott</div>
-        <p class="howto">${
-          document.body.classList.contains('touch')
-            ? 'Drag your finger to steer. Hold <b>FLY</b> to fly and tap <b>ZAP</b> to zap!'
-            : 'Steer with the mouse (or arrow keys). Hold <b>Space</b> (or the mouse button) to fly, and <b>F</b> (or right-click) to zap!'
-        } Pass all 4 checkpoints, dodge the fish, grab coins and fly into the portal to reach the next world.</p>
-        ${document.body.classList.contains('touch') && window.innerHeight > window.innerWidth
-          ? '<p class="note">📱 Turn your phone sideways for a bigger view</p>' : ''}
-        <div class="menu-buttons">
-          <button class="primary" data-action="play">▶ Play</button>
-          <button data-action="settings">⚙ Settings</button>
+        `<div class="title-left">
+          <div class="logo"><span class="logo-bobber"></span><h1 class="big-title">Bobber Run</h1></div>
+          <div class="big-byline">by Eliott</div>
+          <button class="play-button" data-action="play">▶ PLAY</button>
+          <p class="howto">${
+            touch
+              ? 'Drag to steer · hold <b>FLY</b> · tap <b>ZAP</b>'
+              : 'Mouse to steer · hold <b>Space</b> to fly · <b>F</b> to zap'
+          }<br>Dodge the fish, grab coins, fly into the portal!</p>
+          ${touch && window.innerHeight > window.innerWidth ? '<p class="note">📱 Turn your phone sideways for a bigger view</p>' : ''}
+          <div class="level-picker"><span>Or jump to a world:</span><div class="choices">${levelButtons}</div></div>
+          <div class="title-footer">
+            <button class="small-button" data-action="settings">⚙ Settings</button>
+            <span class="difficulty-now">${DIFFICULTY[settings.difficulty].label}</span>
+          </div>
+          <div class="bests">${bestScoresHTML(best)}</div>
         </div>
-        <div class="level-picker"><span>Or start at:</span><div class="choices">${levelButtons}</div></div>
-        <div class="difficulty-now">Difficulty: <b>${DIFFICULTY[settings.difficulty].label}</b></div>
-        <h3>Best scores</h3>
-        <div class="bests">${bestScoresHTML(best)}</div>`,
+        <div class="title-right">
+          <div class="toy-label">🎣 <b>Tackle Box Drop</b> <span>tap to drop · match two to merge!</span></div>
+          <canvas id="tackle-box"></canvas>
+        </div>`,
         'title-menu'
       );
+      toy = createTackleBox(document.getElementById('tackle-box'), {
+        onDrop: () => emit('toyDrop'),
+        onMerge: (tier) => emit('toyMerge', tier),
+      });
+      toy.start();
     },
 
     // note = an extra line at the bottom (used when opened from the pause menu).
@@ -305,6 +324,7 @@ export function createUI() {
     },
 
     hideMenu() {
+      stopToy();
       menu.classList.add('hidden');
     },
 

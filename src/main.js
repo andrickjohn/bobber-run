@@ -20,7 +20,7 @@ import { createShooter } from './shooting.js';
 import { createHyperspace } from './hyperspace.js';
 import { createUI } from './ui.js';
 import { loadSettings, saveSettings, applySettings, loadBestScores, recordScore } from './settings.js';
-import { playChime, playFanfare, playBuzz, playSplash, playGameOver, playDing, playGoldenDing, setMuted, setThrust, playPlop, playZap, playPoof, playFall, setAmbientTheme, playReload, setPortalHum, playHyperspace, playBlackHole } from './audio.js';
+import { playChime, playFanfare, playBuzz, playSplash, playGameOver, playDing, playGoldenDing, setMuted, setThrust, playPlop, playZap, playPoof, playFall, setAmbientTheme, playReload, setPortalHum, playHyperspace, playBlackHole, playToyDrop, playToyMerge } from './audio.js';
 
 const canvas = document.getElementById('game');
 const { renderer, scene, camera, followWithSun, applyTheme } = createScene(canvas);
@@ -282,6 +282,9 @@ ui.on('flyUp', () => bobber.setFlyButton(false));
 ui.on('zapDown', () => shooter.setButton(true));
 ui.on('zapUp', () => shooter.setButton(false));
 ui.on('mute', toggleMute);
+// The Tackle Box toy on the title screen
+ui.on('toyDrop', playToyDrop);
+ui.on('toyMerge', playToyMerge);
 function toggleMute() {
   settings.muted = !settings.muted;
   setMuted(settings.muted);
