@@ -301,7 +301,7 @@
         body.touch .progress { width: 42vw; } /* leave room for the Fly/Zap buttons */
         .toast { top: 44px; }
       }
-      .hidden { display: none; }
+      .hidden { display: none !important; } /* always wins, even over more specific layout rules */
     </style>
   </head>
   <body>
