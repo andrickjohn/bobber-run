@@ -646,11 +646,42 @@ export function playToyDrop() {
 }
 
 // Tackle Box toy: two fish merged. Bigger fish = higher, happier notes (going up a scale).
-// tier 8 (two golden fish) gets a little fanfare.
+// tier 7 (two golden fish) gets a little fanfare.
 export function playToyMerge(tier) {
   const scale = [523, 587, 659, 784, 880, 1047, 1175, 1319, 1568];
   const f = scale[Math.min(tier, scale.length - 1)];
   tone(f, 0, 0.25, 'triangle', 0.14);
   tone(f * 1.5, 0.06, 0.3, 'sine', 0.1);
-  if (tier >= 8) [1047, 1319, 1568, 2093].forEach((n, i) => tone(n, 0.15 + i * 0.09, 0.4, 'triangle', 0.14));
+  if (tier >= 7) [1047, 1319, 1568, 2093].forEach((n, i) => tone(n, 0.15 + i * 0.09, 0.4, 'triangle', 0.14));
+}
+
+// Caught a fish: a bubbly "blub-blip".
+export function playCatch() {
+  tone(400, 0, 0.1, 'sine', 0.12);
+  tone(800, 0.06, 0.14, 'sine', 0.12);
+}
+
+// Fish popped in the cooler: a bright sparkly chord. Each chain step goes higher.
+export function playCoolerPop(chain) {
+  const base = 523 * Math.pow(2, Math.min(chain - 1, 4) / 4);
+  [1, 1.25, 1.5, 2].forEach((m, i) => tone(base * m, i * 0.04, 0.3, 'triangle', 0.12));
+}
+
+// The cooler overflowed: a clattering crash as it dumps out.
+export function playOverflow() {
+  if (!ctx || ctx.state !== 'running' || !noise) return;
+  const t = ctx.currentTime;
+  const src = ctx.createBufferSource();
+  src.buffer = noise;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(2500, t);
+  filter.frequency.exponentialRampToValueAtTime(200, t + 0.6);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.3 * AUDIO.effectsVolume + 0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+  src.connect(filter).connect(gain).connect(master);
+  src.start(t, 0, 0.8);
+  tone(160, 0, 0.4, 'square', 0.08);
+  tone(110, 0.12, 0.5, 'square', 0.08);
 }

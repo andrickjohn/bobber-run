@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { RINGS, PORTAL, FLY, BOBBER, COLORS } from './config.js';
 import { getWaveHeight, lakeCenterX, getLakeEdges, getLevel, getLakeAt } from './world.js';
+import { toonMaterial, outline } from './style.js';
 
 const ringGeo = new THREE.TorusGeometry(RINGS.radius, 0.32, 10, 36);
 const sparkleGeo = new THREE.OctahedronGeometry(0.22);
@@ -40,9 +41,9 @@ export function createCourse(scene) {
       // its lower half. A sky ring is centered at flying height.
       const height = inAir ? FLY.hoverHeight + 0.5 : RINGS.radius - 0.4;
       const color = inAir ? COLORS.ringSky : COLORS.ringWater;
-      const material = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.6, roughness: 0.3 });
+      const material = toonMaterial({ color, emissive: color, emissiveIntensity: 0.45, transparent: true });
       const group = new THREE.Group();
-      group.add(new THREE.Mesh(ringGeo, material));
+      group.add(outline(new THREE.Mesh(ringGeo, material), 0.06));
       // Little sparkles circling the ring so it catches your eye
       const sparkles = [];
       for (let i = 0; i < 6; i++) {
@@ -83,8 +84,8 @@ export function createCourse(scene) {
       const fromCenter = Math.hypot(now.x - r.x, bobberY - r.group.position.y);
       if (fromCenter < RINGS.radius - 0.2) {
         r.passed = true;
-        r.material.transparent = true;
         r.material.emissiveIntensity = 1.5;
+        r.group.traverse((o) => o.userData.isOutline && (o.visible = false)); // fade cleanly
         passedNow.push({ x: r.x, y: r.group.position.y, z: r.z, inAir: r.inAir });
       }
     }

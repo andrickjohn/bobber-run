@@ -6,12 +6,14 @@
 // (about 60 times a second).
 
 import * as THREE from 'three';
-import { CAMERA, BOBBER, OBSTACLES, EFFECTS, FLY, SHOOT, PORTAL, LEVELS, HYPERSPACE, BLACK_HOLE, RINGS, COMBO } from './config.js';
+import { CAMERA, BOBBER, OBSTACLES, EFFECTS, FLY, SHOOT, PORTAL, LEVELS, HYPERSPACE, BLACK_HOLE, RINGS, COMBO, CATCH } from './config.js';
 import { createScene, getChaseCameraPose } from './scene.js';
 import { createWorld, lakeCenterX, setLevel, getLevel, getTheme } from './world.js';
 import { createBobber } from './bobber.js';
 import { createCourse } from './course.js';
 import { createCombo } from './combo.js';
+import { createCatchFish } from './catchfish.js';
+import { createCooler } from './cooler.js';
 import { createObstacles, setSplashHandler } from './obstacles.js';
 import { createWildlife } from './wildlife.js';
 import { createEffects } from './effects.js';
@@ -21,13 +23,14 @@ import { createShooter } from './shooting.js';
 import { createHyperspace } from './hyperspace.js';
 import { createUI } from './ui.js';
 import { loadSettings, saveSettings, applySettings, loadBestScores, recordScore } from './settings.js';
-import { playChime, playFanfare, playSplash, playGameOver, playComboDing, playMultiplierUp, playComboBreak, playGoldenDing, setMuted, setThrust, playPlop, playZap, playPoof, playFall, setAmbientTheme, playReload, setPortalHum, playHyperspace, playBlackHole, playToyDrop, playToyMerge } from './audio.js';
+import { playChime, playFanfare, playSplash, playGameOver, playComboDing, playMultiplierUp, playComboBreak, playGoldenDing, setMuted, setThrust, playPlop, playZap, playPoof, playFall, setAmbientTheme, playReload, setPortalHum, playHyperspace, playBlackHole, playToyDrop, playToyMerge, playCatch, playCoolerPop, playOverflow } from './audio.js';
 
 const canvas = document.getElementById('game');
 const { renderer, scene, camera, followWithSun, applyTheme } = createScene(canvas);
 const bobber = createBobber(scene, camera, canvas);
 const course = createCourse(scene);
 const combo = createCombo();
+const catchFish = createCatchFish(scene);
 const obstacles = createObstacles(scene);
 const effects = createEffects(scene);
 const coins = createCoins(scene);
@@ -35,6 +38,7 @@ const shooter = createShooter(scene, canvas);
 const hyperspace = createHyperspace();
 const game = createGame();
 const ui = createUI();
+const cooler = createCooler(ui.coolerCanvas, { onPop: coolerPopped, onOverflow: coolerOverflowed });
 
 // The player's saved settings (speed, obstacle count, difficulty).
 const settings = loadSettings();
@@ -79,6 +83,10 @@ function loadLevel(index) {
 // Sets up the course for the current level: new gates, new obstacles, bobber at the start.
 function setUpCourse() {
   if (loadedLevel !== game.levelIndex) loadLevel(game.levelIndex);
+  catchFish.reset(); // new schools of fish to catch
+  cooler.clear();
+  portalOpen = false;
+  world.closePortal();
   course.reset(); // new ring gates...
   obstacles.build(OBSTACLES.count, course.getRingSpots()); // ...and new obstacles around them
   combo.reset();
@@ -351,17 +359,24 @@ function comboFeedback(result) {
 }
 
 // Called every frame: the combo timer counts down, and the HUD shows it.
+// The bigger the multiplier, the more the screen sparkles and glows.
 function updateCombo(dt) {
   if (game.state === 'playing') {
     const lost = combo.update(dt); // how big the combo was when it ran out (0 = still going)
     if (lost >= COMBO.perStep) playComboBreak();
   }
   ui.setCombo(combo.count, combo.multiplier, combo.timerFraction);
+  // 0 at ×1, up to 1 at the top multiplier
+  const level = combo.count > 0 ? (combo.multiplier - 1) / (COMBO.maxMultiplier - 1) : 0;
+  if (game.state === 'playing') effects.comboAura(dt, bobber.mesh.position, level);
+  ui.setComboGlow(Math.min(1, level * 1.5));
 }
 
 // ---------------------------------------------------------------------------
 // Ring gates and the portal
 // ---------------------------------------------------------------------------
+let portalOpen = false; // has this level's portal opened yet?
+
 function updateCourse(dt, time) {
   const rings = course.update(dt, time, previousPosition, bobber.position, bobber.mesh.position.y, game.state === 'playing');
   for (const r of rings) {
@@ -370,10 +385,19 @@ function updateCourse(dt, time) {
     scorePoints(game.addRing(combo.multiplier));
     shooter.addAmmo(RINGS.zaps);
     playChime();
+    bobber.boing(1.5);
+    shakeTimer = Math.max(shakeTimer, EFFECTS.shakeTime * 0.4);
     effects.sparkle(r.x, r.y, r.z, true);
     ui.bigPop(r.inAir ? 'SKY RING!' : 'RING!', 'ring');
     comboFeedback(result);
     ui.setProgressTicks(course.progressTicks());
+  }
+  // The portal opens once you're far enough along the course.
+  if (game.state === 'playing' && !portalOpen && bobber.position.z < getLevel().finishZ * PORTAL.openAt) {
+    portalOpen = true;
+    world.openPortal();
+    playMultiplierUp(6);
+    ui.bigPop('PORTAL OPEN!', 'ring');
   }
   if (game.state === 'playing' && course.reachedPortal(previousPosition, bobber.position)) {
     game.state = 'won';
@@ -403,6 +427,7 @@ function updateCoins(dt, time) {
       // Coins and Golden Lures build the combo. Each "ding" is a little higher than the last!
       const result = combo.add(p.golden ? 2 : 1);
       playComboDing(combo.count);
+      bobber.boing(p.golden ? 1.5 : 0.6);
       if (p.golden) {
         playGoldenDing();
         scorePoints(game.addGoldenLure(combo.multiplier));
@@ -416,18 +441,65 @@ function updateCoins(dt, time) {
 }
 
 // ---------------------------------------------------------------------------
+// Catch & stack: caught fish go into the cooler
+// ---------------------------------------------------------------------------
+function updateCatching(dt, time) {
+  const playing = game.state === 'playing';
+  for (const f of catchFish.update(dt, time, bobber, playing && !game.isRespawning())) {
+    catchIntoCooler(f.color, f.x, f.y, f.z);
+  }
+  if (playing) cooler.update(dt);
+}
+
+function catchIntoCooler(color, x, y, z) {
+  game.catchCount++;
+  bobber.boing(1);
+  cooler.add(color);
+  playCatch();
+  effects.splash(x, Math.max(0, y - 0.3), z, 0.4);
+  effects.sparkle(x, y + 0.5, z);
+}
+
+// Three (or more) of a color in a row popped in the cooler.
+function coolerPopped(fishPopped, chain) {
+  const result = combo.add(CATCH.popComboBoost);
+  scorePoints(game.addCoolerPop(fishPopped, chain, combo.multiplier));
+  playCoolerPop(chain);
+  ui.bigPop(chain > 1 ? `CHAIN ×${chain}!` : 'POP!', 'pop');
+  if (chain > 1) shakeTimer = EFFECTS.shakeTime * 0.6;
+  comboFeedback(result);
+}
+
+// The cooler filled to the top with nothing to pop: it dumps, and the combo is lost.
+function coolerOverflowed() {
+  playOverflow();
+  if (combo.break() > 0) playComboBreak();
+  ui.bigPop('COOLER FULL!', 'bad');
+  shakeTimer = EFFECTS.shakeTime;
+}
+
+// ---------------------------------------------------------------------------
 // Zapping
 // ---------------------------------------------------------------------------
+// Zaps can hit obstacles or the little catchable fish.
+const zapTargets = {
+  zap: (x, y, z, r) => obstacles.zap(x, y, z, r) || catchFish.zap(x, y, z, r),
+};
+
 function updateShooting(dt, time) {
   const canShoot = game.state === 'playing' && !game.isRespawning();
-  const shots = shooter.update(dt, time, bobber, obstacles, canShoot);
+  const shots = shooter.update(dt, time, bobber, zapTargets, canShoot);
   if (shots.fired) playZap();
   for (const z of shots.zapped) {
-    // Poof! The obstacle disappears in a burst of sparkles and a splash.
-    effects.sparkle(z.x, z.y + 0.5, z.z, true);
-    effects.splash(z.x, Math.max(0, z.y), z.z, 0.5);
-    playPoof();
-    scorePoints(game.addZap());
+    if (z.type !== 'catch') {
+      // Poof! The obstacle disappears in a burst of sparkles and a splash.
+      effects.sparkle(z.x, z.y + 0.5, z.z, true);
+      effects.splash(z.x, Math.max(0, z.y), z.z, 0.5);
+      playPoof();
+      scorePoints(game.addZap());
+    }
+    // Colored fish (bass, pike, and the little schools) get caught into the cooler.
+    if (z.color !== undefined) catchIntoCooler(z.color, z.x, z.y, z.z);
   }
   for (const p of shots.splashes) effects.splash(p.x, p.y, p.z, 0.25); // missed, hit the water
   // Show at least the normal number of dots, more when carrying extra.
@@ -625,6 +697,7 @@ function step(dt) {
   const wakeOn = game.state === 'playing' && !game.isRespawning() && bobber.onWater;
   effects.update(dt, time, bobber, wakeOn);
   updateCoins(dt, time);
+  updateCatching(dt, time);
 
   previousPosition.copy(bobber.position); // remember where we were, to detect crossing lines
   const flightEvent = bobber.update(dt, time);

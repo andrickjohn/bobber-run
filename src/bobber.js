@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { BOBBER, FLY, SHOOT, COLORS } from './config.js';
 import { getChaseCameraPose } from './scene.js';
+import { cartoon } from './style.js';
 import { getWaveHeight, getLakeEdges, getWaterBounds, isOverLake, getLakeAt, getLevel } from './world.js';
 
 export function createBobber(scene, camera, canvas) {
@@ -42,6 +43,7 @@ export function createBobber(scene, camera, canvas) {
     part.castShadow = true;
     mesh.add(part);
   }
+  cartoon(mesh); // toon shading + outlines
   scene.add(mesh);
 
   // A faint ring on the water that shows where the bobber is heading.
@@ -71,6 +73,8 @@ export function createBobber(scene, camera, canvas) {
   // (otherwise holding the button would make it hop up and down as energy trickles back).
   // falling: dropped below the lakes into a gap (no way back up, you lose a life).
   const flight = { height: 0, vy: 0, energy: 1, flying: false, mustLetGo: false, falling: false };
+  // Squash and stretch: a springy height (1 = normal, more = tall and thin, less = squashed).
+  const squash = { y: 1, speed: 0 };
   let speedSetting = BOBBER.speedSetting;
   let controlsEnabled = true; // turned off when the game is over or won
 
@@ -321,6 +325,18 @@ export function createBobber(scene, camera, canvas) {
     mesh.rotation.x = velocity.z * BOBBER.tiltAmount;
     mesh.rotation.z = -velocity.x * BOBBER.tiltAmount;
 
+    // Squash and stretch, like a cartoon: stretch tall while shooting up, splat flat on
+    // landing, then wobble back. It's a spring: it pulls toward the target height,
+    // overshoots a little and settles.
+    if (landingSpeed > 2) squash.y = Math.max(0.5, 1 - landingSpeed * 0.05);
+    const target = 1 + THREE.MathUtils.clamp(flight.vy * 0.03, -0.15, 0.3);
+    squash.speed += (target - squash.y) * 220 * dt; // pull toward the target
+    squash.speed *= Math.exp(-9 * dt); // and slow down, so it settles
+    squash.y += squash.speed * dt;
+    // Keep the same "amount" of bobber: taller means thinner (1 ÷ √height sideways).
+    const thin = 1 / Math.sqrt(Math.max(0.3, squash.y));
+    mesh.scale.set(thin, squash.y, thin);
+
     // The shadow spot: bigger and fainter the higher we are. (None over empty space.)
     blob.visible = mesh.visible && flight.height > 0.3 && isOverLake(position.z);
     blob.position.set(position.x, wave + 0.05, position.z);
@@ -374,6 +390,8 @@ export function createBobber(scene, camera, canvas) {
     flight.mustLetGo = false;
     flight.falling = false;
     mesh.scale.setScalar(1); // (a black hole may have shrunk it)
+    squash.y = 1;
+    squash.speed = 0;
   }
 
   // Which way to shoot (a direction of length 1, written into "out").
@@ -399,6 +417,11 @@ export function createBobber(scene, camera, canvas) {
     return out.normalize();
   }
 
+  // A quick "boing!" (when grabbing coins and rings): a little springy bounce.
+  function boing(amount = 1) {
+    squash.speed += 6 * amount;
+  }
+
   // The on-screen Fly button (touchscreens) calls this.
   function setFlyButton(down) {
     flyButtonDown = down;
@@ -420,7 +443,7 @@ export function createBobber(scene, camera, canvas) {
 
   return {
     mesh, position, velocity, flight, radius: r,
-    update, reset, setSpeedSetting, setControlsEnabled, setVisible, setFlyButton, getAim,
+    update, reset, setSpeedSetting, setControlsEnabled, setVisible, setFlyButton, getAim, boing,
     // Height above the water and whether it's floating (handy for other files).
     get height() { return flight.height; },
     get onWater() { return !flight.falling && flight.height < 0.05; },

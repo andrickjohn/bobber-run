@@ -121,6 +121,28 @@ export function createEffects(scene) {
     }
   }
 
+  // ----- Combo sparkle -----
+  // The bigger your combo multiplier, the more sparkles swirl around the bobber.
+  // level: 0 = no combo, 1 = maximum multiplier.
+  let auraTimer = 0;
+  const auraColors = [0xffe066, 0xff9f43, 0xff6bd6, 0x7df9ff].map(
+    (c) => new THREE.MeshBasicMaterial({ color: c, transparent: true })
+  );
+  function comboAura(dt, position, level) {
+    if (level <= 0) return;
+    auraTimer -= dt;
+    const every = 0.12 - level * 0.1; // more sparkles per second as the level rises
+    while (auraTimer <= 0) {
+      auraTimer += every;
+      const mat = auraColors[Math.floor(Math.random() * auraColors.length)].clone();
+      const star = new THREE.Mesh(starGeo, mat);
+      const a = Math.random() * Math.PI * 2;
+      star.position.set(position.x + Math.cos(a) * 1.4, position.y + Math.random() * 1.5, position.z + Math.sin(a) * 1.4);
+      const velocity = new THREE.Vector3(Math.cos(a) * 1.5, 2 + Math.random() * 2, Math.sin(a) * 1.5);
+      addParticle('star', star, velocity, 0.6);
+    }
+  }
+
   // ----- Update everything -----
   function update(dt, time, bobber, wakeActive) {
     updateWake(dt, bobber, wakeActive);
@@ -173,5 +195,5 @@ export function createEffects(scene) {
     }
   }
 
-  return { splash, sparkle, confetti, update };
+  return { splash, sparkle, confetti, comboAura, update };
 }

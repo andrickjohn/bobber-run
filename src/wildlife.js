@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { WILDLIFE, COLORS } from './config.js';
 import { getLakeEdges, getTerrainHeight, getLevel } from './world.js';
 import { playFrog, playBird } from './audio.js';
+import { cartoon } from './style.js';
 
 const rand = THREE.MathUtils.randFloat;
 const mat = (color) => new THREE.MeshStandardMaterial({ color, flatShading: true });
@@ -47,6 +48,7 @@ function makeFrogModel() {
   frog.add(body, throat);
   frog.scale.setScalar(1.5); // big enough to spot from the lake
   frog.traverse((o) => (o.castShadow = true));
+  cartoon(frog);
   return { frog, throat };
 }
 
@@ -90,6 +92,7 @@ function makeBirdModel() {
   }
   bird.add(body, head, beak, tail);
   bird.scale.setScalar(1.6);
+  cartoon(bird);
   return { bird, wings };
 }
 

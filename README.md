@@ -4,7 +4,8 @@
 
 Steer a fishing bobber across a lake, swoop through trails of coins to build huge combos,
 fly through glowing ring gates, dodge (or zap!) fishing-themed obstacles, and fly into the
-swirling portal at the end. The portal shows your
+swirling portal at the end (it bursts open when you've gone far enough). Catch colorful fish
+and stack them in your cooler: three of a color pop! The portal shows your
 score, then blasts you through hyperspace to the next world: **Space Lakes**, where lakes
 float on islands among the stars above a swirling black hole, then **Lava Lagoon**, where cool
 pools sit on volcanic rock above a sea of lava, and finally **Aurora Fjord**, a snowy, slippery
@@ -25,6 +26,7 @@ Plays on computers, tablets and phones.
 | **M** | Sound button | Sound on/off |
 
 - **Coins come in trails** (lines, waves, zigzags, circles, arches and spirals into the sky). Every coin in a row builds your 🔥 **combo**: every 5 in a row raises the multiplier (×2, ×3 … ×10), and each coin's "ding" is a little higher than the last. Wait too long between coins, or get hit, and the combo breaks.
+- **Catch & stack:** colorful little fish swim in schools; bump into them (or zap them, or zap a bass or pike) to **catch** them. Caught fish drop into the **cooler** on the side of the screen. **Three of a color in a row** (up/down or across) **pop** for big points, and fish falling into the gaps can set off **chains**. Fill the cooler with nothing to pop and it overflows: you lose your combo!
 - **Ring gates** are optional glowing hoops: gold ones on the water, purple ones up in the sky. Go through one for points (times your combo), a combo boost and a free zap.
 - Getting hit by a fish, turtle, lure or log costs a life and your combo. You come back a little behind where it happened and blink for a moment (safe).
 - **Flying** uses energy (the ⚡ bar), which recharges while you float on the water. Fly over obstacles, grab coins floating in the sky, and cross the gaps between space lakes. Fall into a gap and you lose a life!
@@ -63,6 +65,7 @@ jump straight to a world from the title screen.
 | Coin | +10 × combo multiplier |
 | Golden Lure (ends some trails) | +50 × combo multiplier |
 | Ring gate | +50 × combo multiplier |
+| Each fish popped in the cooler | +30 × chain number × combo multiplier |
 | Finish | +500 |
 | Time bonus | max(0, 300 − seconds) × 2 |
 | Each life left at the finish | +100 |
@@ -117,6 +120,10 @@ Audio API.
 | `src/device.js` | Detects phones/tablets (for touch buttons and lighter graphics) |
 | `src/course.js` | Ring gates, the finish portal, and where you respawn |
 | `src/combo.js` | The combo counter and multiplier |
+| `src/catchfish.js` | The schools of colorful fish you can catch |
+| `src/cooler.js` | The cooler puzzle: stacking, matching, chains and overflow |
+| `src/fishart.js` | Draws the flat 2D fish, bobbers and lures (title toy and cooler) |
+| `src/style.js` | The cartoon look: toon shading and outlines |
 | `src/tacklebox.js` | The Tackle Box Drop fish-merging toy on the title screen |
 | `src/obstacles.js` | Every obstacle type and how it moves |
 | `src/coins.js` | Coin trails, Golden Lures and Zap Packs |

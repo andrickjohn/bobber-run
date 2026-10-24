@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { COINS, COLORS } from './config.js';
 import { getWaveHeight, getLakeEdges, getLevel, isOverLake } from './world.js';
+import { cartoon } from './style.js';
 
 const rand = THREE.MathUtils.randFloat;
 
@@ -76,6 +77,7 @@ export function createCoins(scene) {
     const model =
       kind === 'golden' ? makeGoldenLureModel() : kind === 'zapPack' ? makeZapPackModel() : makeCoinModel(coinMaterial);
     model.group.position.set(x, 0, z);
+    cartoon(model.group, 0.12);
     scene.add(model.group);
     coins.push({ ...model, x, z, kind, golden: kind === 'golden', airHeight, spin: Math.random() * Math.PI * 2 });
   }

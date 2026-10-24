@@ -64,6 +64,12 @@ export function createUI() {
   document.body.appendChild(comboBox);
   let shownCount = 0;
 
+  // The cooler: caught fish stack up in it (drawn by cooler.js on this canvas).
+  const coolerBox = document.createElement('div');
+  coolerBox.className = 'cooler';
+  coolerBox.innerHTML = `<div class="cooler-label">🧊 Cooler</div><canvas id="cooler-canvas"></canvas>`;
+  document.body.appendChild(coolerBox);
+
   // Big words that burst onto the middle of the screen ("×3 COMBO!", "RING!", "AWESOME!").
   const pops = document.createElement('div');
   pops.className = 'big-pops';
@@ -73,6 +79,11 @@ export function createUI() {
   const warpTint = document.createElement('div');
   warpTint.className = 'warp-tint';
   document.body.appendChild(warpTint);
+
+  // A golden glow around the screen edges that gets stronger with your combo.
+  const comboGlow = document.createElement('div');
+  comboGlow.className = 'combo-glow';
+  document.body.appendChild(comboGlow);
 
   // A full-screen white layer used for the portal "warp" flash.
   const flashOverlay = document.createElement('div');
@@ -205,6 +216,7 @@ export function createUI() {
 
   return {
     on,
+    coolerCanvas: coolerBox.querySelector('canvas'),
 
     // On the title screen the in-game HUD is hidden.
     setTitleMode(on) {
@@ -218,15 +230,21 @@ export function createUI() {
         .join('');
       const touch = document.body.classList.contains('touch');
       showMenu(
-        `<div class="title-left">
+        `<div class="title-head">
           <div class="logo"><span class="logo-bobber"></span><h1 class="big-title">Bobber Run</h1></div>
           <div class="big-byline">by Eliott</div>
+        </div>
+        <div class="toy-wrap">
           <button class="play-button" data-action="play">▶ PLAY</button>
+          <canvas id="tackle-box"></canvas>
+          <div class="toy-label">🎣 <b>Tackle Box Drop</b>: tap to drop, match two to merge!</div>
+        </div>
+        <div class="title-side">
           <p class="howto">${
             touch
               ? 'Drag to steer · hold <b>FLY</b> · tap <b>ZAP</b>'
               : 'Mouse to steer · hold <b>Space</b> to fly · <b>F</b> to zap'
-          }<br>Dodge the fish, grab coins, fly into the portal!</p>
+          }<br>Swoop through coin trails for combos, catch fish, fly into the portal!</p>
           ${touch && window.innerHeight > window.innerWidth ? '<p class="note">📱 Turn your phone sideways for a bigger view</p>' : ''}
           <div class="level-picker"><span>Or jump to a world:</span><div class="choices">${levelButtons}</div></div>
           <div class="title-footer">
@@ -234,10 +252,6 @@ export function createUI() {
             <span class="difficulty-now">${DIFFICULTY[settings.difficulty].label}</span>
           </div>
           <div class="bests">${bestScoresHTML(best)}</div>
-        </div>
-        <div class="title-right">
-          <div class="toy-label">🎣 <b>Tackle Box Drop</b> <span>tap to drop · match two to merge!</span></div>
-          <canvas id="tackle-box"></canvas>
         </div>`,
         'title-menu'
       );
@@ -399,6 +413,7 @@ export function createUI() {
         ${row(`Golden Lures (${b.goldenCount})`, b.goldenLures)}
         ${row(`Rings (${b.ringCount})`, b.rings)}
         ${b.zapCount ? row(`Zapped (${b.zapCount})`, b.zaps) : ''}
+        ${row(`Cooler pops (${b.popCount} of ${b.catchCount} caught)`, b.cooler)}
         ${row('Best combo', '🔥 ' + b.bestCombo)}
         ${row('Finish', b.finish)}
         ${row(`Time bonus (${formatTime(b.seconds)})`, b.timeBonus)}
@@ -468,6 +483,11 @@ export function createUI() {
         shownCount = count;
       }
       document.getElementById('combo-fill').style.width = Math.round(timerFraction * 100) + '%';
+    },
+
+    // How strong the combo glow around the screen is (0 = none, 1 = max multiplier).
+    setComboGlow(amount) {
+      comboGlow.style.opacity = amount;
     },
 
     // A big word bursting onto the screen. kind changes its color: '', 'ring' or 'milestone'.

@@ -232,7 +232,7 @@ export function createWorld(scene) {
     });
   }
 
-  return { update, dispose, blackHole };
+  return { update, dispose, blackHole, openPortal: () => portal.open(), closePortal: () => portal.close() };
 }
 
 // ---------------------------------------------------------------------------
@@ -756,7 +756,20 @@ function createPortal(theme) {
     sparkles.push({ mesh: s, offset: (i / 18) * Math.PI * 2, wobble: Math.random() * 3 });
   }
 
+  // The portal starts CLOSED (a dim ring with no swirl) and opens when you've gone far
+  // enough down the course. openAmount goes from 0 (closed) to 1 (wide open).
+  let openAmount = 0;
+  let opening = false;
+  const ringMat = ring.material;
+
   function update(time) {
+    if (opening) openAmount = Math.min(1, openAmount + 0.02);
+    // "Ease out back": overshoots a little then settles, so it bursts open with a bounce.
+    const t = openAmount;
+    const pop = t === 0 ? 0 : 1 + 2.7 * Math.pow(t - 1, 3) + 1.7 * Math.pow(t - 1, 2);
+    for (const d of discs) d.scale.setScalar(Math.max(0.001, pop));
+    ringMat.emissiveIntensity = 0.15 + 0.6 * t;
+    for (const s of sparkles) s.mesh.visible = t > 0.5;
     discs[0].rotation.z = time * PORTAL.spinSpeed;
     discs[1].rotation.z = -time * PORTAL.spinSpeed * 0.7;
     const pulse = 1 + Math.sin(time * 3) * 0.03;
@@ -770,7 +783,17 @@ function createPortal(theme) {
     }
   }
 
-  return { group, update };
+  return {
+    group,
+    update,
+    open() {
+      opening = true;
+    },
+    close() {
+      opening = false;
+      openAmount = 0;
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -25,8 +25,10 @@ export function createGame() {
     time: 0,            // race timer in seconds
     timerRunning: false, // starts when the bobber leaves the dock
     // Points so far, kept separately so we can show a breakdown at the end.
-    points: { coins: 0, goldenLures: 0, rings: 0, zaps: 0 },
+    points: { coins: 0, goldenLures: 0, rings: 0, zaps: 0, cooler: 0 },
     ringCount: 0,
+    catchCount: 0,      // fish caught into the cooler
+    popCount: 0,        // fish popped (three in a row)
     zapCount: 0,
     coinCount: 0,
     goldenCount: 0,
@@ -49,8 +51,10 @@ export function createGame() {
       game.respawnTimer = 0;
       game.time = 0;
       game.timerRunning = false;
-      game.points = { coins: 0, goldenLures: 0, rings: 0, zaps: 0 };
+      game.points = { coins: 0, goldenLures: 0, rings: 0, zaps: 0, cooler: 0 };
       game.ringCount = 0;
+      game.catchCount = 0;
+      game.popCount = 0;
       game.zapCount = 0;
       game.coinCount = 0;
       game.goldenCount = 0;
@@ -77,6 +81,13 @@ export function createGame() {
       game.points.rings += points;
       return points;
     },
+    // Fish popped in the cooler: points per fish × the chain number × the combo multiplier.
+    addCoolerPop(fishPopped, chain, multiplier = 1) {
+      const points = SCORING.coolerPop * fishPopped * chain * multiplier;
+      game.popCount += fishPopped;
+      game.points.cooler += points;
+      return points;
+    },
     addZap() {
       game.zapCount++;
       game.points.zaps += SCORING.zap;
@@ -85,7 +96,7 @@ export function createGame() {
     // The score during the race (before finish bonuses and the difficulty multiplier).
     currentScore() {
       const p = game.points;
-      return p.coins + p.goldenLures + p.rings + p.zaps;
+      return p.coins + p.goldenLures + p.rings + p.zaps + p.cooler;
     },
 
     // Total for the whole run so far, counting the level we're on (used for Game Over).
@@ -110,6 +121,9 @@ export function createGame() {
         ringCount: game.ringCount,
         zaps: game.points.zaps,
         zapCount: game.zapCount,
+        cooler: game.points.cooler,
+        catchCount: game.catchCount,
+        popCount: game.popCount,
         bestCombo,
         finish: SCORING.finish,
         timeBonus,

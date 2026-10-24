@@ -99,6 +99,21 @@ export const RINGS = {
   zaps: 1,             // free zaps for going through
 };
 
+// Catch & stack: colorful fish you catch drop into the cooler on the side of the screen
+// (a small grid). Three of the same color in a row (up/down or across) pop, and fish
+// falling into the gaps can make more pops: a chain! Fill it with nothing to pop and it
+// overflows: you lose your combo.
+export const CATCH = {
+  colors: ['#ff5a5f', '#4dabf7', '#69db7c', '#ffd43b'], // red, blue, green, yellow
+  coolerColumns: 3,    // the cooler is 3 fish wide...
+  coolerRows: 5,       // ...and 5 fish tall
+  popComboBoost: 2,    // a pop also adds this much to your combo
+  schoolSpacing: 60,   // a little school of catchable fish about this often along the course
+  schoolSize: 3,       // fish in each school
+  sameColorChance: 0.5, // chance a fish matches the one before it in its school
+  catchRadius: 2.2,    // how close you have to bump a fish to catch it
+};
+
 // The combo: grab coins one after another without getting hit or waiting too long.
 export const COMBO = {
   perStep: 5,          // every 5 in a row raises the multiplier by 1 (×2, ×3, ...)
@@ -114,6 +129,7 @@ export const PORTAL = {
   tube: 0.9,           // thickness of the ring
   centerHeight: 6,     // how high the middle of the ring is above the water
   spinSpeed: 1.6,      // how fast the swirl spins
+  openAt: 0.7,         // the portal opens once you're this far along the course (0.7 = 70%)
 };
 
 // The "Tackle Box Drop" toy on the title screen
@@ -205,8 +221,8 @@ export const LEVELS = [
 // among the stars.
 export const THEMES = {
   lake: {
-    sky: 0x9fd4f0,
-    fog: 0x9fd4f0,
+    sky: 0x8fd8ff,
+    fog: 0x9fdcff,
     fogNear: 60,
     fogFar: 300,
     sun: 0xfff1d6,
@@ -214,11 +230,11 @@ export const THEMES = {
     hemiSky: 0xcfeeff,
     hemiGround: 0x4a7a3a,
     hemiIntensity: 1.0,
-    water: 0x2f8f9d,
-    wetSand: 0xb9a676,
-    sand: 0xe6d3a3,
-    grass: 0x6dbb4f,
-    grassDark: 0x4f9a3a,
+    water: 0x1fb5c9,   // bright candy turquoise
+    wetSand: 0xd8b878,
+    sand: 0xffe2a8,
+    grass: 0x7fdc5a,
+    grassDark: 0x56c23d,
     portal: 0xff7a1a,
     portalGlow: 0xffd180,
     wildlife: true,    // frogs and birds
@@ -382,6 +398,7 @@ export const SCORING = {
   timeBonusPerSecond: 2,
   perLifeLeft: 100,
   zap: 25,               // zapping an obstacle
+  coolerPop: 30,         // each fish popped in the cooler (times the chain and your combo)
   // (Ring gates are worth RINGS.points, times your combo multiplier.)
   difficulty: 'normal',  // 'easy', 'normal' or 'hard' (default; the settings screen changes it)
   multiplier: { easy: 1, normal: 1.5, hard: 2 },
@@ -469,6 +486,12 @@ export const CAMERA = {
                        // water, so the bobber goes there and stops (instead of drifting forever).
 };
 
+// The cartoon look (see style.js)
+export const STYLE = {
+  outlineColor: 0x1b1b2f,  // dark navy outlines (softer than pure black)
+  outlineThickness: 0.08,  // outlines are this much bigger than the shape (8%)
+};
+
 export const SCENE = {
   cameraFov: 60,
   portraitFov: 78,     // wider view when the screen is taller than it is wide (phone held upright)
@@ -509,9 +532,7 @@ export const COLORS = {
   gateMissed: 0xff2a2a,
   finishRed: 0xe53935,
   finishWhite: 0xffffff,
-  bass: 0x4f8a3c,
   bassBelly: 0xd8e6a0,
-  pike: 0x6f8f6a,
   pikeFin: 0x8a6d3b,
   turtleShell: 0x3e5e2e,
   turtleSkin: 0x7a8c45,

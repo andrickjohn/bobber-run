@@ -24,8 +24,9 @@
 // only hit a bobber that's up in the air too.
 
 import * as THREE from 'three';
-import { OBSTACLES, COLORS } from './config.js';
+import { OBSTACLES, COLORS, CATCH } from './config.js';
 import { getWaveHeight, getLakeEdges, getLevel, isOverLake } from './world.js';
+import { cartoon } from './style.js';
 
 const rand = THREE.MathUtils.randFloat;
 
@@ -41,10 +42,8 @@ export function setSplashHandler(fn) {
 // ---------------------------------------------------------------------------
 const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, flatShading: true, ...extra });
 const M = {
-  bass: mat(COLORS.bass),
   bassBelly: mat(COLORS.bassBelly),
   eye: mat(0x111111),
-  pike: mat(COLORS.pike),
   pikeFin: mat(COLORS.pikeFin),
   shell: mat(COLORS.turtleShell),
   skin: mat(COLORS.turtleSkin),
@@ -63,6 +62,10 @@ const M = {
   whirlShadow: new THREE.MeshBasicMaterial({ color: 0x0b1f40, transparent: true, opacity: 0.25, depthWrite: false }),
 };
 
+// Bass and pike come in the four catch colors: zap one to catch it into your cooler.
+const catchMats = CATCH.colors.map((c) => mat(c));
+const randomCatchColor = () => Math.floor(Math.random() * CATCH.colors.length);
+
 // Turns a heading (direction of travel on the water) into a Y rotation.
 // Our fish models face +Z, so atan2(x, z) gives the angle to turn them.
 function faceDirection(group, dx, dz) {
@@ -78,18 +81,19 @@ function clampToLake(x, z, margin) {
 // ---------------------------------------------------------------------------
 // Fish models (all face +Z)
 // ---------------------------------------------------------------------------
-function makeBassModel() {
+function makeBassModel(color) {
   const fish = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.7, 10, 8), M.bass);
+  const bodyMat = catchMats[color];
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.7, 10, 8), bodyMat);
   body.scale.set(0.8, 1, 2); // stretch a sphere into a fish shape
   const belly = new THREE.Mesh(new THREE.SphereGeometry(0.6, 10, 6), M.bassBelly);
   belly.scale.set(0.7, 0.6, 1.7);
   belly.position.y = -0.25;
-  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.6, 0.9, 4), M.bass);
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.6, 0.9, 4), bodyMat);
   tail.rotation.x = -Math.PI / 2; // point the cone backward
   tail.scale.set(0.3, 1, 1.2);
   tail.position.z = -1.6;
-  const fin = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.7, 3), M.bass);
+  const fin = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.7, 3), bodyMat);
   fin.position.set(0, 0.7, -0.1);
   fin.scale.set(0.3, 1, 1.5);
   for (const side of [-1, 1]) {
@@ -102,11 +106,11 @@ function makeBassModel() {
   return fish;
 }
 
-function makePikeModel() {
+function makePikeModel(color) {
   const fish = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), M.pike);
+  const body = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), catchMats[color]);
   body.scale.set(0.42, 0.4, 2.4); // long and thin
-  const snout = new THREE.Mesh(new THREE.ConeGeometry(0.25, 1.0, 6), M.pike);
+  const snout = new THREE.Mesh(new THREE.ConeGeometry(0.25, 1.0, 6), catchMats[color]);
   snout.rotation.x = Math.PI / 2;
   snout.position.z = 2.6;
   const tail = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.0, 4), M.pikeFin);
@@ -133,7 +137,8 @@ function makeBass(homeX, z) {
   const c = OBSTACLES.bass;
   const group = new THREE.Group();
   const pivot = new THREE.Group(); // tilts the fish nose-up / nose-down along the arc
-  pivot.add(makeBassModel());
+  const color = randomCatchColor();
+  pivot.add(makeBassModel(color));
   group.add(pivot);
   group.visible = false;
 
@@ -190,7 +195,7 @@ function makeBass(homeX, z) {
   // The whole stretch of water the bass leaps across (used to keep coins away).
   const area = () => ({ x: homeX, z, r: c.jumpDistance / 2 + c.radius });
 
-  return { type: 'bass', deadly: true, group, update, hitCircles, area };
+  return { type: 'bass', deadly: true, group, update, hitCircles, area, color };
 }
 
 // ---------------------------------------------------------------------------
@@ -200,7 +205,8 @@ function makeBass(homeX, z) {
 function makePike(x, z, circleAround = null) {
   const c = OBSTACLES.pike;
   const group = new THREE.Group();
-  const { fish, tail } = makePikeModel();
+  const color = randomCatchColor();
+  const { fish, tail } = makePikeModel(color);
   group.add(fish);
 
   let dir = Math.random() < 0.5 ? -1 : 1;
@@ -233,7 +239,7 @@ function makePike(x, z, circleAround = null) {
     return [{ x: pos.x, z: pos.z, r: c.radius, y: 0, h: 0.7 }];
   }
 
-  return { type: 'pike', deadly: true, group, update, hitCircles };
+  return { type: 'pike', deadly: true, group, update, hitCircles, color };
 }
 
 // ---------------------------------------------------------------------------
@@ -316,6 +322,7 @@ function makeLure(x, z) {
   group.add(pendulum);
 
   const line = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, L, 4), M.line);
+  line.userData.noOutline = true; // a thin fishing line doesn't need an outline
   line.position.y = -L / 2;
   const lure = new THREE.Group();
   lure.position.y = -L;
@@ -619,6 +626,8 @@ export function createObstacles(scene) {
   }
 
   function add(obstacle) {
+    // The cartoon look (whirlpools are swirly water, so they stay as they are).
+    if (obstacle.type !== 'whirlpool') cartoon(obstacle.group);
     list.push(obstacle);
     scene.add(obstacle.group);
   }
@@ -654,7 +663,8 @@ export function createObstacles(scene) {
         if (closeEnough && rightHeight) {
           scene.remove(o.group);
           list.splice(i, 1);
-          return { type: o.type, x: c.x, y: c.y ?? 0, z: c.z };
+          // (Bass and pike have a catch color: they go into the cooler.)
+          return { type: o.type, color: o.color, x: c.x, y: c.y ?? 0, z: c.z };
         }
       }
     }

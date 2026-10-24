@@ -29,9 +29,10 @@
       /* ----- HUD (drawn on top of the 3D view) ----- */
       .hud {
         position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
-        color: #fff; font-weight: 700; font-size: 18px;
-        background: rgba(10, 60, 70, 0.55); padding: 6px 14px; border-radius: 10px;
-        pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+        color: #fff; font-weight: 800; font-size: 19px;
+        background: rgba(15, 50, 90, 0.6); padding: 6px 18px; border-radius: 999px;
+        border: 3px solid rgba(255,255,255,0.7);
+        pointer-events: none; text-shadow: 0 2px 0 rgba(0,0,0,0.35);
       }
       .hud { text-align: center; }
       @keyframes pulse { from { opacity: 1; } to { opacity: 0.45; } }
@@ -76,13 +77,15 @@
       .big-number { font-size: 36px !important; font-weight: 800; margin: 4px 0 !important; }
       .big-number span { font-size: 16px; font-weight: 600; }
       .new-best { color: #e65100; font-weight: 800; font-size: 22px; animation: pulse 0.6s infinite alternate; }
-      /* ----- Title screen: info + PLAY on the left, the Tackle Box toy on the right ----- */
+      /* ----- Title screen: the Tackle Box toy in the middle with PLAY floating on top ----- */
       .menu.title-menu {
-        width: min(900px, calc(100vw - 32px)); display: grid; grid-template-columns: 1fr 1.1fr;
-        gap: 22px; align-items: stretch; padding: 22px;
+        width: min(920px, calc(100vw - 32px)); display: grid; grid-template-columns: 1.25fr 1fr;
+        grid-template-areas: "head head" "toy side"; gap: 10px 22px; align-items: stretch; padding: 18px 22px;
         background: linear-gradient(160deg, rgba(255,255,255,0.97), rgba(225,246,250,0.96));
       }
-      .title-left { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+      .title-head { grid-area: head; display: flex; flex-direction: column; align-items: center; }
+      .toy-wrap { grid-area: toy; position: relative; display: flex; flex-direction: column; padding-top: 46px; }
+      .title-side { grid-area: side; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
       .logo { display: flex; align-items: center; gap: 12px; }
       .logo .big-title { margin: 0 !important; line-height: 1; text-shadow: 0 3px 0 #c45500; }
       /* A little bobber that bobs up and down next to the title */
@@ -96,36 +99,37 @@
         background: #fff; border-radius: 2px; box-shadow: 0 -3px 0 1px #fbc02d;
       }
       @keyframes bob { 0%, 100% { transform: translateY(0) rotate(-6deg); } 50% { transform: translateY(-8px) rotate(6deg); } }
-      /* The big PLAY button gently pulses so it's impossible to miss */
+      /* The big PLAY button floats and bobs on top of the tackle box */
       .menu .play-button {
-        font-size: 30px; font-weight: 900; letter-spacing: 2px; padding: 14px 54px; margin: 8px 0 4px;
-        border: none; border-radius: 999px; color: #fff;
+        position: absolute; left: 50%; top: 0; z-index: 2; white-space: nowrap;
+        font-size: 30px; font-weight: 900; letter-spacing: 2px; padding: 10px 54px;
+        border: 4px solid #fff; border-radius: 999px; color: #fff;
         background: linear-gradient(180deg, #ffa040, #ff6a00);
-        box-shadow: 0 6px 0 #c45500, 0 10px 20px rgba(255,106,0,0.35);
-        animation: pulse-play 1.4s ease-in-out infinite;
+        box-shadow: 0 6px 0 #c45500, 0 12px 24px rgba(255,106,0,0.4);
+        animation: float-play 1.6s ease-in-out infinite;
       }
       .menu .play-button:hover { background: linear-gradient(180deg, #ffb05c, #ff7a1a); }
-      .menu .play-button:active { transform: translateY(4px); box-shadow: 0 2px 0 #c45500; }
-      @keyframes pulse-play { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+      .menu .play-button:active { box-shadow: 0 2px 0 #c45500; }
+      @keyframes float-play {
+        0%, 100% { transform: translateX(-50%) translateY(0) scale(1); }
+        50% { transform: translateX(-50%) translateY(-6px) scale(1.05); }
+      }
       .title-footer { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
       .menu .small-button { font-size: 15px; padding: 6px 14px; }
-      .title-right { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
-      .toy-label { font-size: 16px; }
-      .toy-label span { display: block; font-size: 13px; opacity: 0.7; }
+      .toy-label { font-size: 13px; opacity: 0.75; margin-top: 4px; }
       #tackle-box { width: 100%; flex: 1; min-height: 340px; display: block; touch-action: none; cursor: pointer; }
-      /* Phones and narrow windows: stack the two halves */
+      /* Phones and narrow windows: one column (title, toy with PLAY, then the rest) */
       @media (max-width: 720px) {
-        .menu.title-menu { grid-template-columns: 1fr; gap: 8px; padding: 12px; }
+        .menu.title-menu { grid-template-columns: 1fr; grid-template-areas: "head" "toy" "side"; gap: 6px; padding: 12px; }
         .title-menu .big-title { font-size: 38px !important; }
         .title-menu .logo-bobber { width: 30px; height: 30px; }
-        .title-menu .big-byline { margin-bottom: 0; }
         .title-menu .howto { font-size: 14px !important; margin: 2px 0; }
         .title-menu .note, .title-menu .bests { display: none; }
         .title-menu .level-picker { margin-top: 2px; font-size: 13px; }
         .title-menu .level-picker .choice { font-size: 13px; padding: 5px 4px; }
-        .title-menu .title-footer { margin-top: 2px; }
-        #tackle-box { min-height: 270px; }
-        .menu .play-button { font-size: 24px; padding: 10px 40px; margin: 4px 0; }
+        #tackle-box { min-height: 260px; }
+        .menu .play-button { font-size: 22px; padding: 7px 34px; }
+        .toy-wrap { padding-top: 38px; }
       }
 
       /* Short windows: squeeze the menus so they fit without scrolling */
@@ -151,16 +155,17 @@
       }
       .top-buttons { position: fixed; top: 12px; right: 12px; display: flex; gap: 8px; }
       .hud-button {
-        font: inherit; font-weight: 700; font-size: 16px; color: #0b4f5c;
-        background: rgba(255,255,255,0.85); border: none; border-radius: 10px;
-        padding: 8px 14px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        font: inherit; font-weight: 800; font-size: 16px; color: #1b1b2f;
+        background: #fff; border: 3px solid #1b1b2f; border-radius: 999px;
+        padding: 6px 14px; cursor: pointer; box-shadow: 0 3px 0 #1b1b2f;
       }
+      .hud-button:active { transform: translateY(2px); box-shadow: 0 1px 0 #1b1b2f; }
       .hud-button:hover { background: #fff; }
       .mute-button { position: fixed; bottom: 12px; right: 12px; font-size: 14px; padding: 6px 12px; }
       .title {
         position: fixed; top: 10px; left: 14px; pointer-events: none;
-        color: #fff; font-size: 30px; font-weight: 800; letter-spacing: 0.5px;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.35);
+        color: #fff; font-size: 30px; font-weight: 900; letter-spacing: 0.5px;
+        -webkit-text-stroke: 1.5px #1b1b2f; text-shadow: 0 3px 0 #1b1b2f;
       }
       .title .byline {
         display: block; font-size: 15px; font-weight: 500; font-style: italic;
@@ -175,8 +180,9 @@
       }
       .life.lost { opacity: 0.25; filter: grayscale(1); }
       .score {
-        position: fixed; top: 62px; left: 14px; pointer-events: none;
-        color: #fff; font-size: 26px; font-weight: 800; text-shadow: 0 2px 4px rgba(0,0,0,0.35);
+        position: fixed; top: 58px; left: 14px; pointer-events: none;
+        color: #ffe066; font-size: 32px; font-weight: 900;
+        -webkit-text-stroke: 1.5px #1b1b2f; text-shadow: 0 3px 0 #1b1b2f;
       }
       .score-label { font-size: 15px; font-weight: 600; opacity: 0.9; }
       .points-pop {
@@ -221,6 +227,13 @@
         position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 9;
         background: radial-gradient(ellipse at center, rgba(125,249,255,0) 30%, rgba(40,90,255,0.55) 80%, rgba(10,20,80,0.9) 100%);
       }
+      .combo-glow {
+        position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.3s; z-index: 1;
+        background: radial-gradient(ellipse at center, rgba(255,224,102,0) 55%, rgba(255,190,60,0.35) 85%, rgba(255,107,214,0.5) 100%);
+        animation: glow-pulse 0.8s ease-in-out infinite alternate;
+      }
+      @keyframes glow-pulse { from { filter: brightness(1); } to { filter: brightness(1.4); } }
+      body.title-mode .combo-glow, body.warping .combo-glow { display: none; }
       .warp-countdown { font-size: 18px !important; }
       body.warping .title, body.warping .score, body.warping .hud, body.warping .top-buttons,
       body.warping .lives, body.warping .energy, body.warping .ammo, body.warping .progress,
@@ -271,8 +284,8 @@
       /* Phone held sideways: very short screen. Smaller touch buttons, HUD back on top. */
       @media (max-height: 500px) {
         .menu { padding: 10px 18px; }
-        .menu.title-menu { padding: 10px 14px; gap: 12px; }
-        .title-left .bests, .title-left .note { display: none; }
+        .menu.title-menu { padding: 10px 14px; gap: 6px 14px; }
+        .title-side .bests, .title-side .note, .title-side .howto { display: none; }
         #tackle-box { min-height: 0; }
         .menu .play-button { font-size: 22px; padding: 8px 36px; margin: 4px 0; }
         .logo-bobber { width: 30px; height: 30px; }
@@ -299,7 +312,9 @@
         .toast { top: 44px; }
       }
       /* ----- Combo meter (under the score) ----- */
-      .combo { position: fixed; top: 96px; left: 14px; pointer-events: none; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.4); }
+      .combo { position: fixed; top: 100px; left: 14px; pointer-events: none; color: #fff; text-shadow: 0 2px 0 #1b1b2f; }
+      .combo-mult { -webkit-text-stroke: 1.5px #1b1b2f; }
+      .combo-track { border: 2px solid #1b1b2f; }
       .combo-top { display: flex; align-items: baseline; gap: 6px; }
       .combo-fire { font-size: 22px; }
       .combo-mult { font-size: 32px; font-weight: 900; color: #ffe066; }
@@ -316,6 +331,20 @@
       @keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
       body.title-mode .combo, body.warping .combo { display: none; }
 
+      /* ----- The cooler (caught fish stack up in it) ----- */
+      .cooler { position: fixed; right: 14px; top: 124px; width: 104px; pointer-events: none; text-align: center; }
+      .cooler-label { color: #fff; font-size: 12px; font-weight: 800; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+      #cooler-canvas { width: 104px; height: 176px; display: block; }
+      body.title-mode .cooler, body.warping .cooler { display: none; }
+      @media (max-width: 720px) {
+        .cooler { right: 8px; top: 108px; width: 78px; }
+        #cooler-canvas { width: 78px; height: 134px; }
+      }
+      @media (max-height: 500px) {
+        .cooler { top: 100px; width: 72px; }
+        #cooler-canvas { width: 72px; height: 122px; }
+      }
+
       /* ----- Big pop-up words in the middle of the screen ----- */
       .big-pops { position: fixed; left: 0; right: 0; top: 34%; display: flex; flex-direction: column; align-items: center; pointer-events: none; z-index: 5; }
       .big-pop {
@@ -325,6 +354,8 @@
       }
       .big-pop.ring { color: #7df9ff; -webkit-text-stroke-color: rgba(0, 60, 90, 0.6); font-size: 36px; }
       .big-pop.milestone { color: #ff6bd6; font-size: 60px; }
+      .big-pop.pop { color: #69db7c; -webkit-text-stroke-color: rgba(0, 70, 20, 0.6); }
+      .big-pop.bad { color: #ff5a5f; -webkit-text-stroke-color: rgba(90, 0, 0, 0.6); }
       @keyframes big-pop {
         0% { transform: scale(0.3); opacity: 0; }
         20% { transform: scale(1.25); opacity: 1; }

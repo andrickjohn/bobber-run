@@ -1,8 +1,9 @@
 // tacklebox.js
 // "Tackle Box Drop": the little toy on the title screen.
 // Move along the top to aim, tap/click to drop a fish into the tackle box.
-// When two of the SAME fish touch, they merge into the next bigger fish:
-//   minnow → perch → sunfish → bass → trout → pike → catfish → GOLDEN FISH
+// Bobbers, lures and fish drop in. When two of the SAME thing touch, they merge into
+// the next bigger one:
+//   bobber → lure → minnow → perch → bass → pike → GOLDEN FISH
 // Two golden fish make a big sparkly burst. Fill the box past the line and it
 // shakes empty, so you can start again. It's a toy, so there's no losing!
 //
@@ -12,18 +13,21 @@
 //   - two fish that overlap get pushed apart, and bounce off each other
 
 import { TACKLE_BOX } from './config.js';
+import { drawPiece } from './fishart.js';
 
-// The fish, from smallest to biggest. r = size (as a fraction of the box width).
+// Everything that can be in the box, from smallest to biggest.
+// r = size (as a fraction of the box width).
 const FISH = [
-  { name: 'Minnow', r: 0.045, body: '#8fd3ff', belly: '#e3f6ff' },
-  { name: 'Perch', r: 0.06, body: '#c6d84a', belly: '#f4f7c8', stripes: '#5d7a1e' },
-  { name: 'Sunfish', r: 0.075, body: '#ffa94d', belly: '#ffe3b8' },
-  { name: 'Bass', r: 0.095, body: '#5fae4e', belly: '#d8efc4' },
-  { name: 'Trout', r: 0.115, body: '#e88aa0', belly: '#fde2e8', spots: '#8a3a52' },
-  { name: 'Pike', r: 0.135, body: '#7f9c7a', belly: '#dfe9d8', stripes: '#4a6346' },
-  { name: 'Catfish', r: 0.16, body: '#9a7653', belly: '#e8d8c4', whiskers: true },
-  { name: 'Golden Fish', r: 0.185, body: '#ffd43b', belly: '#fff3bf', golden: true },
+  { name: 'Bobber', r: 0.05, kind: 'bobber' },
+  { name: 'Lure', r: 0.065, kind: 'lure' },
+  { name: 'Minnow', r: 0.085, kind: 'fish', body: '#8fd3ff', belly: '#e3f6ff' },
+  { name: 'Perch', r: 0.105, kind: 'fish', body: '#c6d84a', belly: '#f4f7c8', stripes: '#5d7a1e' },
+  { name: 'Bass', r: 0.13, kind: 'fish', body: '#5fae4e', belly: '#d8efc4' },
+  { name: 'Pike', r: 0.155, kind: 'fish', body: '#7f9c7a', belly: '#dfe9d8', stripes: '#4a6346' },
+  { name: 'Golden Fish', r: 0.185, kind: 'fish', body: '#ffd43b', belly: '#fff3bf', golden: true },
 ];
+// Burst colors for merges (bobbers and lures don't have a body color).
+const burstColor = (tier) => FISH[tier].body || (FISH[tier].kind === 'bobber' ? '#e53935' : '#ffd54f');
 
 export function createTackleBox(canvas, callbacks = {}) {
   const ctx = canvas.getContext('2d');
@@ -179,7 +183,7 @@ export function createTackleBox(canvas, callbacks = {}) {
     // Points double with each size: minnows give a little, golden fish a LOT.
     const points = TACKLE_BOX.mergePoints * 2 ** tier;
     addScore(points, x, y);
-    burst(x, y, FISH[tier].body, 10 + tier * 3);
+    burst(x, y, burstColor(tier), 10 + tier * 3);
     if (tier < FISH.length - 1) {
       const born = makeFish(tier + 1, x, y, (a.vx + b.vx) / 2, (a.vy + b.vy) / 2 - 80);
       born.pop = 1; // starts with a bouncy "pop"
@@ -218,7 +222,7 @@ export function createTackleBox(canvas, callbacks = {}) {
     if (overflowTime > TACKLE_BOX.overflowSeconds) {
       overflowTime = 0;
       shakeTime = 0.6;
-      for (const f of fish) burst(f.x, f.y, FISH[f.tier].body, 6);
+      for (const f of fish) burst(f.x, f.y, burstColor(f.tier), 6);
       fish = [];
       score = 0;
       callbacks.onEmpty?.();
@@ -227,79 +231,7 @@ export function createTackleBox(canvas, callbacks = {}) {
 
   // ----- Drawing -----
   function drawFish(f, x, y) {
-    const type = FISH[f.tier];
-    const r = f.r * (1 + Math.sin(f.pop * Math.PI) * 0.25); // bouncy pop when just born
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(f.angle);
-    // Tail: a triangle at the back
-    ctx.fillStyle = type.body;
-    ctx.beginPath();
-    ctx.moveTo(-r * 0.75, 0);
-    ctx.lineTo(-r * 1.25, -r * 0.55);
-    ctx.lineTo(-r * 1.25, r * 0.55);
-    ctx.closePath();
-    ctx.fill();
-    // Body: a round oval, with a lighter belly
-    ctx.beginPath();
-    ctx.ellipse(0, 0, r, r * 0.85, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = type.belly;
-    ctx.beginPath();
-    ctx.ellipse(r * 0.05, r * 0.35, r * 0.7, r * 0.42, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Patterns
-    if (type.stripes) {
-      ctx.strokeStyle = type.stripes;
-      ctx.lineWidth = Math.max(1.5, r * 0.12);
-      for (const sx of [-0.35, 0, 0.35]) {
-        ctx.beginPath();
-        ctx.moveTo(r * sx, -r * 0.7);
-        ctx.lineTo(r * sx, r * 0.1);
-        ctx.stroke();
-      }
-    }
-    if (type.spots) {
-      ctx.fillStyle = type.spots;
-      for (const [sx, sy] of [[-0.4, -0.3], [0.1, -0.5], [-0.1, -0.05], [0.45, -0.15]]) {
-        ctx.beginPath();
-        ctx.arc(r * sx, r * sy, r * 0.09, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    if (type.whiskers) {
-      ctx.strokeStyle = '#3d2b1a';
-      ctx.lineWidth = 1.5;
-      for (const dir of [-1, 1]) {
-        ctx.beginPath();
-        ctx.moveTo(r * 0.85, r * 0.15);
-        ctx.quadraticCurveTo(r * 1.25, r * 0.15 + dir * r * 0.2, r * 1.35, dir * r * 0.5);
-        ctx.stroke();
-      }
-    }
-    if (type.golden) {
-      // Shine: a white highlight and a sparkle that twinkles
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.beginPath();
-      ctx.ellipse(-r * 0.3, -r * 0.45, r * 0.25, r * 0.12, -0.4, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // Eye: white with a black pupil
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(r * 0.5, -r * 0.2, r * 0.2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#111';
-    ctx.beginPath();
-    ctx.arc(r * 0.56, -r * 0.2, r * 0.1, 0, Math.PI * 2);
-    ctx.fill();
-    // Smile
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-    ctx.lineWidth = Math.max(1, r * 0.06);
-    ctx.beginPath();
-    ctx.arc(r * 0.62, r * 0.18, r * 0.16, 0.2, Math.PI * 0.8);
-    ctx.stroke();
-    ctx.restore();
+    drawPiece(ctx, x, y, f.r, FISH[f.tier], f.angle, f.pop);
   }
 
   function draw(time) {
