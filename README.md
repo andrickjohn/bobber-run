@@ -2,8 +2,9 @@
 
 *A fishing-themed 3D ball game by Eliott, built with [Claude Code](https://claude.com/claude-code) for a 10th grade tech project.*
 
-Steer a fishing bobber across a lake, pass all 4 checkpoints, dodge (or zap!) fishing-themed
-obstacles, grab coins, and fly into the swirling portal at the end. The portal shows your
+Steer a fishing bobber across a lake, swoop through trails of coins to build huge combos,
+fly through glowing ring gates, dodge (or zap!) fishing-themed obstacles, and fly into the
+swirling portal at the end. The portal shows your
 score, then blasts you through hyperspace to the next world: **Space Lakes**, where lakes
 float on islands among the stars above a swirling black hole, then **Lava Lagoon**, where cool
 pools sit on volcanic rock above a sea of lava, and finally **Aurora Fjord**, a snowy, slippery
@@ -23,10 +24,11 @@ Plays on computers, tablets and phones.
 | **R** | ↻ button | Restart the level |
 | **M** | Sound button | Sound on/off |
 
-- Go **between** the two buoys of each checkpoint, in order (1 → 4). Going around one costs points and you'll have to go back.
-- Getting hit by a fish, turtle, lure or log costs a life. You go back to your last checkpoint and blink for a moment (safe).
+- **Coins come in trails** (lines, waves, zigzags, circles, arches and spirals into the sky). Every coin in a row builds your 🔥 **combo**: every 5 in a row raises the multiplier (×2, ×3 … ×10), and each coin's "ding" is a little higher than the last. Wait too long between coins, or get hit, and the combo breaks.
+- **Ring gates** are optional glowing hoops: gold ones on the water, purple ones up in the sky. Go through one for points (times your combo), a combo boost and a free zap.
+- Getting hit by a fish, turtle, lure or log costs a life and your combo. You come back a little behind where it happened and blink for a moment (safe).
 - **Flying** uses energy (the ⚡ bar), which recharges while you float on the water. Fly over obstacles, grab coins floating in the sky, and cross the gaps between space lakes. Fall into a gap and you lose a life!
-- **Zaps** (the 🎯 dots) knock obstacles out for points. They reload slowly; grab **⚡ Zap Packs** (+3) and pass checkpoints (+2) to earn more.
+- **Zaps** (the 🎯 dots) knock obstacles out for points. They reload slowly; grab **⚡ Zap Packs** (+3) and go through ring gates (+1) to earn more.
 - **Lily pads** slow you down and **whirlpools** (Hard only) pull you in, but neither costs a life (and you can fly right over them).
 
 ### Worlds
@@ -58,10 +60,9 @@ jump straight to a world from the title screen.
 
 | Event | Points |
 |---|---|
-| Coin | +10 |
-| Golden Lure (rare) | +50 |
-| Checkpoint | +100 |
-| Missed checkpoint | −25 |
+| Coin | +10 × combo multiplier |
+| Golden Lure (ends some trails) | +50 × combo multiplier |
+| Ring gate | +50 × combo multiplier |
 | Finish | +500 |
 | Time bonus | max(0, 300 − seconds) × 2 |
 | Each life left at the finish | +100 |
@@ -114,9 +115,11 @@ Audio API.
 | `src/hyperspace.js` | The star-streak hyperspace effect between worlds |
 | `src/blackhole.js` | The black hole under Space Lakes and the spiral fall into it |
 | `src/device.js` | Detects phones/tablets (for touch buttons and lighter graphics) |
-| `src/checkpoints.js` | Checkpoint gates and progress tracking |
+| `src/course.js` | Ring gates, the finish portal, and where you respawn |
+| `src/combo.js` | The combo counter and multiplier |
+| `src/tacklebox.js` | The Tackle Box Drop fish-merging toy on the title screen |
 | `src/obstacles.js` | Every obstacle type and how it moves |
-| `src/coins.js` | Coins, Golden Lures and Zap Packs |
+| `src/coins.js` | Coin trails, Golden Lures and Zap Packs |
 | `src/game.js` | Lives, score, timer, game states, runs through the worlds, collisions |
 | `src/ui.js` | HUD and menus (HTML/CSS on top of the 3D view) |
 | `src/settings.js` | Saving settings and best scores |
@@ -128,7 +131,8 @@ Audio API.
 
 This game was built step by step with Claude Code, Anthropic's AI coding assistant, following
 the plan in `prompt.md` (phases 1–9), then extended with flying, zapping, portals, Space Lakes
-and touch controls (phases 10–14). Each phase was tested in the browser before moving on.
+and touch controls (phases 10–14), then a playable title screen and combo-based scoring
+(phases 15–16). Each phase was tested in the browser before moving on.
 
 To add a new world, add an entry to `LEVELS` (and maybe a new look in `THEMES`) in
 `src/config.js`.

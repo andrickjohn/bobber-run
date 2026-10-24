@@ -13,7 +13,7 @@
 // A "run" goes through every level in order. Lives carry over from level to level,
 // and each level's score is added to the run's total.
 
-import { GAME, SCORING, BOBBER } from './config.js';
+import { GAME, SCORING, BOBBER, RINGS } from './config.js';
 
 export function createGame() {
   const game = {
@@ -25,7 +25,8 @@ export function createGame() {
     time: 0,            // race timer in seconds
     timerRunning: false, // starts when the bobber leaves the dock
     // Points so far, kept separately so we can show a breakdown at the end.
-    points: { coins: 0, goldenLures: 0, checkpoints: 0, penalties: 0, zaps: 0 },
+    points: { coins: 0, goldenLures: 0, rings: 0, zaps: 0 },
+    ringCount: 0,
     zapCount: 0,
     coinCount: 0,
     goldenCount: 0,
@@ -48,7 +49,8 @@ export function createGame() {
       game.respawnTimer = 0;
       game.time = 0;
       game.timerRunning = false;
-      game.points = { coins: 0, goldenLures: 0, checkpoints: 0, penalties: 0, zaps: 0 };
+      game.points = { coins: 0, goldenLures: 0, rings: 0, zaps: 0 };
+      game.ringCount = 0;
       game.zapCount = 0;
       game.coinCount = 0;
       game.goldenCount = 0;
@@ -56,35 +58,34 @@ export function createGame() {
 
     // ----- Scoring -----
     // Each add... returns how many points were added (so the HUD can show "+10").
-    addCoin() {
+    // multiplier = the combo multiplier (×1, ×2, ...): long combos are worth a lot!
+    addCoin(multiplier = 1) {
+      const points = SCORING.coin * multiplier;
       game.coinCount++;
-      game.points.coins += SCORING.coin;
-      return SCORING.coin;
+      game.points.coins += points;
+      return points;
     },
-    addGoldenLure() {
+    addGoldenLure(multiplier = 1) {
+      const points = SCORING.goldenLure * multiplier;
       game.goldenCount++;
-      game.points.goldenLures += SCORING.goldenLure;
-      return SCORING.goldenLure;
+      game.points.goldenLures += points;
+      return points;
     },
-    addCheckpoint() {
-      game.points.checkpoints += SCORING.checkpoint;
-      return SCORING.checkpoint;
+    addRing(multiplier = 1) {
+      const points = RINGS.points * multiplier;
+      game.ringCount++;
+      game.points.rings += points;
+      return points;
     },
     addZap() {
       game.zapCount++;
       game.points.zaps += SCORING.zap;
       return SCORING.zap;
     },
-    addMissedCheckpoint() {
-      game.points.penalties += SCORING.missedCheckpoint;
-      return SCORING.missedCheckpoint;
-    },
-
     // The score during the race (before finish bonuses and the difficulty multiplier).
-    // It never shows below zero.
     currentScore() {
       const p = game.points;
-      return Math.max(0, p.coins + p.goldenLures + p.checkpoints + p.zaps + p.penalties);
+      return p.coins + p.goldenLures + p.rings + p.zaps;
     },
 
     // Total for the whole run so far, counting the level we're on (used for Game Over).
@@ -93,7 +94,8 @@ export function createGame() {
     },
 
     // Works out this level's score at the finish portal, with every part listed.
-    finalScore() {
+    // bestCombo = the longest combo this level (shown on the results screen).
+    finalScore(bestCombo = 0) {
       const seconds = game.time;
       const timeBonus = Math.round(Math.max(0, SCORING.timeBonusSeconds - seconds) * SCORING.timeBonusPerSecond);
       const livesBonus = game.lives * SCORING.perLifeLeft;
@@ -104,10 +106,11 @@ export function createGame() {
         coinCount: game.coinCount,
         goldenLures: game.points.goldenLures,
         goldenCount: game.goldenCount,
-        checkpoints: game.points.checkpoints,
+        rings: game.points.rings,
+        ringCount: game.ringCount,
         zaps: game.points.zaps,
         zapCount: game.zapCount,
-        penalties: game.points.penalties,
+        bestCombo,
         finish: SCORING.finish,
         timeBonus,
         seconds,
@@ -139,7 +142,7 @@ export function createGame() {
       return false;
     },
 
-    // Called right after the bobber is put back at a checkpoint.
+    // Called right after the bobber is put back on the lake.
     startInvincible() {
       game.invincibleTimer = GAME.invincibleTime;
     },

@@ -1,7 +1,7 @@
 // effects.js
 // Short-lived visual effects:
 //   splash   – a ring on the water plus droplets (getting hit, fish jumping in and out)
-//   sparkle  – little stars bursting outward (coins, checkpoints)
+//   sparkle  – little stars bursting outward (coins, ring gates)
 //   confetti – colorful pieces flying up and fluttering down (the finish line)
 //   wake     – foamy puffs left behind the bobber when it moves fast, spreading in a "V"
 

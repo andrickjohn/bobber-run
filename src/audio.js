@@ -335,7 +335,7 @@ function tone(freq, start, length, type = 'sine', volume = 0.2) {
   osc.stop(t + length + 0.05);
 }
 
-// Checkpoint chime: two quick rising notes.
+// Ring chime: two quick rising notes.
 export function playChime() {
   tone(880, 0, 0.35, 'triangle');
   tone(1320, 0.1, 0.45, 'triangle');
@@ -387,10 +387,37 @@ export function playGameOver() {
   [392, 330, 262].forEach((f, i) => tone(f, i * 0.28, 0.6, 'triangle', 0.2));
 }
 
-// Coin "ding": two quick bright notes.
-export function playDing() {
-  tone(1568, 0, 0.18, 'sine', 0.15);
-  tone(2093, 0.06, 0.3, 'sine', 0.15);
+// Coin "ding": two quick bright notes. Each coin in a combo is one step higher up the
+// musical scale than the last (up to two octaves), so a long trail plays a rising tune!
+// Multiplying by 2^(steps/12) moves a note up by that many semitones (piano keys).
+export function playComboDing(count) {
+  const steps = Math.min(Math.max(count - 1, 0), 24);
+  const f = 1046.5 * Math.pow(2, steps / 12);
+  tone(f, 0, 0.16, 'sine', 0.13);
+  tone(f * 1.5, 0.05, 0.25, 'sine', 0.1);
+}
+
+// The combo multiplier went up: a quick happy run of notes (more notes for bigger ones).
+export function playMultiplierUp(multiplier) {
+  const notes = [784, 988, 1175, 1568, 1976, 2349];
+  for (let i = 0; i < Math.min(multiplier + 1, notes.length); i++) tone(notes[i], i * 0.05, 0.22, 'square', 0.05);
+}
+
+// A big combo was lost: a sad "wah-wah" sliding down.
+export function playComboBreak() {
+  if (!ctx || ctx.state !== 'running') return;
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(440, t);
+  osc.frequency.exponentialRampToValueAtTime(180, t + 0.5);
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.15 * AUDIO.effectsVolume + 0.0001, t + 0.03);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+  osc.connect(gain).connect(master);
+  osc.start(t);
+  osc.stop(t + 0.6);
 }
 
 // Golden Lure: a fast sparkly run up the scale.

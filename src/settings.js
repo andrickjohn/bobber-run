@@ -7,7 +7,7 @@
 // read and write is wrapped in try/catch. If it fails, the game still works; it just
 // won't remember anything.
 
-import { BOBBER, OBSTACLES, COINS, GAME, SCORING, DIFFICULTY, SETTINGS_LIMITS } from './config.js';
+import { BOBBER, OBSTACLES, COINS, COMBO, GAME, SCORING, DIFFICULTY, SETTINGS_LIMITS } from './config.js';
 
 const SETTINGS_KEY = 'bobberRun.settings';
 const BEST_KEY = 'bobberRun.bestScores';
@@ -90,9 +90,9 @@ export function applySettings(settings) {
   OBSTACLES.includeWhirlpools = d.whirlpools;
   OBSTACLES.turtle.chaseRadius = d.turtleChaseRadius;
   OBSTACLES.turtle.giveUpRadius = d.turtleGiveUpRadius;
-  COINS.maxOnScreen = d.coinsMax;
-  COINS.spawnMin = d.coinSpawnMin;
-  COINS.spawnMax = d.coinSpawnMax;
+  COINS.gapMin = d.coinGapMin;
+  COINS.gapMax = d.coinGapMax;
+  COMBO.window = d.comboWindow;
   GAME.lives = d.lives;
   GAME.invincibleTime = d.invincibleTime;
 }

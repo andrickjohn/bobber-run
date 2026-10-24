@@ -1,6 +1,6 @@
 // ui.js
 // Everything drawn on top of the 3D view with HTML and CSS:
-//   - the HUD (heads-up display): title, score, checkpoints, timer, lives, progress bar
+//   - the HUD (heads-up display): title, score, combo meter, timer, lives, progress bar
 //   - the menus: title screen, settings, pause, game over and victory
 //   - little pop-up notes ("toasts")
 //
@@ -49,10 +49,25 @@ export function createUI() {
   const hud = document.createElement('div');
   hud.className = 'hud';
   hud.innerHTML = `
-    <div class="hud-checkpoints"><span class="hud-long"><span id="level-name"></span> <span class="hud-sep">·</span> Checkpoints</span><span class="hud-short">🚩</span> <span id="cp-count">0 / 0</span>
-      <span class="hud-sep">·</span> ⏱ <span id="timer">0:00.0</span></div>
-    <div class="hud-warning hidden" id="cp-warning"></div>`;
+    <div class="hud-main"><span class="hud-long"><span id="level-name"></span> <span class="hud-sep">·</span></span>
+      ⏱ <span id="timer">0:00.0</span></div>`;
   document.body.appendChild(hud);
+
+  // The combo meter, under the score: "🔥 ×3" with how many in a row, and a bar that
+  // drains. Grab the next coin before it empties!
+  const comboBox = document.createElement('div');
+  comboBox.className = 'combo hidden';
+  comboBox.innerHTML = `
+    <div class="combo-top"><span class="combo-fire">🔥</span><span class="combo-mult" id="combo-mult">×1</span>
+      <span class="combo-count" id="combo-count">0 in a row</span></div>
+    <div class="combo-track"><div class="combo-fill" id="combo-fill"></div></div>`;
+  document.body.appendChild(comboBox);
+  let shownCount = 0;
+
+  // Big words that burst onto the middle of the screen ("×3 COMBO!", "RING!", "AWESOME!").
+  const pops = document.createElement('div');
+  pops.className = 'big-pops';
+  document.body.appendChild(pops);
 
   // A blue, glowing-edges layer for hyperspace.
   const warpTint = document.createElement('div');
@@ -283,12 +298,12 @@ export function createUI() {
       );
     },
 
-    showGameOver(score, passed, total, levelName, isNewBest) {
+    showGameOver(score, bestCombo, levelName, isNewBest) {
       showMenu(
         `<h1>Game Over</h1>
         ${isNewBest ? '<div class="new-best">★ New best! ★</div>' : ''}
         <p class="big-number">${score} <span>points</span></p>
-        <p>Made it to <b>${levelName}</b>, checkpoint <b>${passed} / ${total}</b></p>
+        <p>Made it to <b>${levelName}</b> · best combo <b>🔥 ${bestCombo}</b></p>
         <div class="menu-buttons">
           <button class="primary" data-action="play">↻ Play Again</button>
           <button data-action="quit">⌂ Title</button>
@@ -382,9 +397,9 @@ export function createUI() {
       return `<table>
         ${row(`Coins (${b.coinCount})`, b.coins)}
         ${row(`Golden Lures (${b.goldenCount})`, b.goldenLures)}
-        ${row('Checkpoints', b.checkpoints)}
+        ${row(`Rings (${b.ringCount})`, b.rings)}
         ${b.zapCount ? row(`Zapped (${b.zapCount})`, b.zaps) : ''}
-        ${b.penalties ? row('Missed checkpoints', b.penalties) : ''}
+        ${row('Best combo', '🔥 ' + b.bestCombo)}
         ${row('Finish', b.finish)}
         ${row(`Time bonus (${formatTime(b.seconds)})`, b.timeBonus)}
         ${row(`Lives bonus (${b.livesLeft} left)`, b.livesBonus)}
@@ -425,26 +440,43 @@ export function createUI() {
       document.getElementById('progress-fill').style.width = percent + '%';
       document.getElementById('progress-marker').style.left = percent + '%';
     },
-    // Little ticks on the progress bar for each checkpoint; passed ones turn green.
-    setProgressCheckpoints(fractions, passed) {
+    // Little ticks on the progress bar for each ring gate; rings you went through turn green.
+    // ticks = [{ fraction (0 = start, 1 = portal), passed }]
+    setProgressTicks(ticks) {
       const track = document.getElementById('progress-track');
       track.querySelectorAll('.progress-tick').forEach((t) => t.remove());
-      fractions.forEach((f, i) => {
+      for (const t of ticks) {
         const tick = document.createElement('div');
-        tick.className = i < passed ? 'progress-tick passed' : 'progress-tick';
-        tick.style.left = f * 100 + '%';
+        tick.className = t.passed ? 'progress-tick passed' : 'progress-tick';
+        tick.style.left = t.fraction * 100 + '%';
         track.appendChild(tick);
-      });
+      }
     },
-    setCheckpoints(passed, total) {
-      document.getElementById('cp-count').textContent = `${passed} / ${total}`;
+
+    // The combo meter. Hidden when there's no combo. It "bumps" bigger each time it grows.
+    setCombo(count, multiplier, timerFraction) {
+      comboBox.classList.toggle('hidden', count === 0);
+      if (count !== shownCount) {
+        document.getElementById('combo-mult').textContent = '×' + multiplier;
+        document.getElementById('combo-count').textContent = `${count} in a row`;
+        if (count > shownCount) {
+          comboBox.classList.remove('bump');
+          void comboBox.offsetWidth; // (restart the CSS animation)
+          comboBox.classList.add('bump');
+        }
+        comboBox.dataset.level = Math.min(multiplier, 5); // the color gets hotter as it grows
+        shownCount = count;
+      }
+      document.getElementById('combo-fill').style.width = Math.round(timerFraction * 100) + '%';
     },
-    // A warning that stays on screen (for example "Go back for checkpoint 2").
-    // Pass null to hide it.
-    setWarning(text) {
-      const el = document.getElementById('cp-warning');
-      el.textContent = text || '';
-      el.classList.toggle('hidden', !text);
+
+    // A big word bursting onto the screen. kind changes its color: '', 'ring' or 'milestone'.
+    bigPop(text, kind = '') {
+      const pop = document.createElement('div');
+      pop.className = 'big-pop ' + kind;
+      pop.textContent = text;
+      pops.appendChild(pop);
+      setTimeout(() => pop.remove(), 1100);
     },
     // A short note that pops up and disappears by itself.
     showToast(text, seconds = 1.5) {

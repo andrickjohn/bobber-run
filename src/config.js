@@ -77,21 +77,35 @@ export const SHOOT = {
   cooldown: 0.25,      // seconds between shots while holding the button
   maxAmmo: 6,          // the automatic reload fills you up to this many zaps
   reloadTime: 2.5,     // seconds to get one zap back
-  maxCarry: 12,        // with Zap Packs and checkpoints you can carry up to this many
+  maxCarry: 12,        // with Zap Packs and ring gates you can carry up to this many
   packAmount: 3,       // zaps in a Zap Pack pickup
-  checkpointBonus: 2,  // zaps earned for passing a checkpoint
+  // (Ring gates also give free zaps: see RINGS.zaps.)
   radius: 0.35,        // size of a zap (for hitting things)
   aimAhead: 15,        // without a mouse target, aim at the water this far ahead
 };
 
 export const COURSE = {
-  checkpointCount: 4,  // gates spaced evenly between the start and the finish
-  gateWidth: 26,       // distance between a gate's two buoys
-  buoyRadius: 1.2,
-  gateShiftMax: 20,    // gates are moved up to this far left or right of the lake's middle
-  gateAngleMax: 0.6,   // and turned up to this much (radians; 0.6 is about 35 degrees)
-  gateZJitter: 10,     // and nudged up to this far forward or back
   startFlagX: -6,      // where the little flag on the start line stands
+};
+
+// Ring gates: optional glowing hoops along the course. Fly or float through one for
+// points, a combo boost and a free zap.
+export const RINGS = {
+  spacing: 55,         // about this far apart along the course
+  radius: 3.4,         // size of the hoop (the hole you go through)
+  airChance: 0.4,      // chance a ring floats up high (you have to FLY through it)
+  points: 50,          // points for going through (times your combo multiplier)
+  comboBoost: 3,       // counts as this many coins for your combo
+  zaps: 1,             // free zaps for going through
+};
+
+// The combo: grab coins one after another without getting hit or waiting too long.
+export const COMBO = {
+  perStep: 5,          // every 5 in a row raises the multiplier by 1 (×2, ×3, ...)
+  maxMultiplier: 10,
+  window: 2.6,         // seconds you have to grab the next coin before the combo breaks
+                       // (difficulty changes this)
+  milestones: { 10: 'NICE!', 25: 'GREAT!', 50: 'AWESOME!', 100: 'LEGENDARY!' },
 };
 
 // The swirling portal at the end of every level
@@ -134,7 +148,6 @@ export const HYPERSPACE = {
 // Levels ("scenes"). Finish one and its portal takes you to the next.
 // Each level is made of one or more lakes, listed from the start (near) to the finish (far).
 //   start / end   – where the lake begins and ends along Z
-//   checkpointZ   – where the 4 gates go (null = spread evenly)
 //   bend / widthWiggle – how curvy the lake is
 //   width         – (optional) how wide the lakes are; LAKE.width if left out
 //   drag          – (optional) water drag; lower = more slippery (BOBBER.drag if left out)
@@ -145,7 +158,6 @@ export const LEVELS = [
     name: 'Home Lake',
     theme: 'lake',
     lakes: [{ start: 40, end: -430 }],
-    checkpointZ: null,
     finishZ: -400,
     bend: 12,
     widthWiggle: 12,
@@ -159,7 +171,6 @@ export const LEVELS = [
       { start: -250, end: -320 },
       { start: -360, end: -445 },
     ],
-    checkpointZ: [-55, -170, -285, -385],
     finishZ: -420,
     bend: 6,
     widthWiggle: 8,
@@ -174,7 +185,6 @@ export const LEVELS = [
       { start: -300, end: -355 },
       { start: -395, end: -455 },
     ],
-    checkpointZ: [-40, -135, -232, -328],
     finishZ: -430,
     width: 62,      // narrower pools, so steering matters more
     bend: 14,
@@ -184,7 +194,6 @@ export const LEVELS = [
     name: 'Aurora Fjord',
     theme: 'ice',
     lakes: [{ start: 40, end: -430 }],
-    checkpointZ: null,
     finishZ: -400,
     bend: 18,       // the curviest lake yet
     widthWiggle: 14,
@@ -298,7 +307,7 @@ export const OBSTACLES = {
   speedMultiplier: 1,    // all obstacles move this many times faster (difficulty changes it)
   includeWhirlpools: false, // whirlpools only appear on Hard (set by DIFFICULTY below)
   startSafeZone: 30,     // no obstacles closer than this to the start line
-  checkpointSafeRadius: 12, // no obstacles placed this close to a checkpoint's center
+  ringSafeRadius: 10,  // no obstacles placed this close to a ring gate
   finishSafeZone: 15,    // no obstacles this close to the finish
 
   bass: {
@@ -353,39 +362,33 @@ export const WILDLIFE = {
 };
 
 export const COINS = {
-  maxOnScreen: 8,      // most coins on the lake at once
-  lifetime: 14,        // seconds before a coin disappears
-  fadeTime: 2,         // it fades out during its last this-many seconds
-  spawnMin: 0.6,       // seconds between new coins (random between min and max)
-  spawnMax: 1.6,
-  spawnAheadMin: 15,   // coins appear this far ahead of the bobber...
-  spawnAheadMax: 80,   // ...up to this far
+  // Coins come in trails: lines, waves, zigzags, circles and spirals into the sky.
+  aheadDistance: 110,  // trails are laid out this far ahead of the bobber
+  gapMin: 14,          // empty water between one trail and the next (difficulty changes these)
+  gapMax: 26,
+  spacing: 3.6,        // distance between coins in a trail
   pickupRadius: 1.0,   // coin size for touching
   hoverHeight: 0.9,    // how high above the water coins float
-  airChance: 0.3,      // chance a coin floats up in the sky (fly up to grab it!)
-  airMinHeight: 4,
-  airMaxHeight: 7,
-  goldenChance: 1 / 15, // chance a spawn is a Golden Lure instead of a coin
-  zapPackChance: 1 / 8, // chance a spawn is a Zap Pack (+zaps) instead of a coin
-  obstacleClearance: 3, // coins never appear this close to an obstacle
+  skyHeight: 6,        // height of coins in the sky (flying height)
+  goldenChance: 1 / 6, // chance a trail ends with a Golden Lure
+  zapPackChance: 1 / 5, // chance a Zap Pack floats between two trails
 };
 
 export const SCORING = {
-  coin: 10,
-  goldenLure: 50,
-  checkpoint: 100,
+  coin: 10,            // (times your combo multiplier)
+  goldenLure: 50,      // (times your combo multiplier)
   finish: 500,
   timeBonusSeconds: 300, // time bonus = max(0, timeBonusSeconds − your time) × timeBonusPerSecond
   timeBonusPerSecond: 2,
   perLifeLeft: 100,
-  missedCheckpoint: -25, // going around a checkpoint costs points
   zap: 25,               // zapping an obstacle
+  // (Ring gates are worth RINGS.points, times your combo multiplier.)
   difficulty: 'normal',  // 'easy', 'normal' or 'hard' (default; the settings screen changes it)
   multiplier: { easy: 1, normal: 1.5, hard: 2 },
 };
 
 // What each difficulty changes. When a game starts, settings.js copies the chosen
-// column into the values above (OBSTACLES, COINS, GAME), and the game reads those.
+// column into the values above (OBSTACLES, COINS, COMBO, GAME), and the game reads those.
 export const DIFFICULTY = {
   easy: {
     label: 'Easy',
@@ -395,9 +398,9 @@ export const DIFFICULTY = {
     obstacleSpeed: 0.65,    // obstacles move at 65% speed
     turtleChaseRadius: 8,
     turtleGiveUpRadius: 14,
-    coinsMax: 12,
-    coinSpawnMin: 0.4,
-    coinSpawnMax: 1.0,
+    coinGapMin: 8,          // trails close together
+    coinGapMax: 16,
+    comboWindow: 3.6,       // lots of time to reach the next coin
     whirlpools: false,
   },
   normal: {
@@ -408,9 +411,9 @@ export const DIFFICULTY = {
     obstacleSpeed: 1,
     turtleChaseRadius: 12,
     turtleGiveUpRadius: 20,
-    coinsMax: 8,
-    coinSpawnMin: 0.6,
-    coinSpawnMax: 1.6,
+    coinGapMin: 14,
+    coinGapMax: 26,
+    comboWindow: 2.6,
     whirlpools: false,
   },
   hard: {
@@ -421,9 +424,9 @@ export const DIFFICULTY = {
     obstacleSpeed: 1.45,
     turtleChaseRadius: 18,
     turtleGiveUpRadius: 28,
-    coinsMax: 5,
-    coinSpawnMin: 1.0,
-    coinSpawnMax: 2.4,
+    coinGapMin: 22,         // trails far apart
+    coinGapMax: 38,
+    comboWindow: 1.9,       // keep moving or lose the combo!
     whirlpools: true,
   },
 };
@@ -532,6 +535,8 @@ export const COLORS = {
   sparkle: 0xfff59d,
   wake: 0xffffff,
   zap: 0x7df9ff,
+  ringWater: 0xffc107, // gold hoops on the water
+  ringSky: 0xd16bff,   // purple hoops up in the sky
   zapPack: 0x00e5ff,
   zapGlow: 0x00b8d4,
   confetti: [0xff7a1a, 0x43d36b, 0x42a5f5, 0xffeb3b, 0xe53935, 0xffffff],

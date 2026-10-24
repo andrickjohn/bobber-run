@@ -1,16 +1,17 @@
 // main.js
 // The starting point of the game. It creates everything (scene, world, bobber,
-// checkpoints, obstacles, wildlife, effects, HUD, menus), loads levels, switches between
+// ring gates, coin trails, combos, obstacles, wildlife, effects, HUD, menus), loads levels, switches between
 // the screens (title, settings, playing, paused, level complete, game over), and runs
 // the main loop: update everything, check for hits, move the camera, draw a frame, repeat
 // (about 60 times a second).
 
 import * as THREE from 'three';
-import { CAMERA, BOBBER, OBSTACLES, EFFECTS, FLY, SHOOT, PORTAL, LEVELS, HYPERSPACE, BLACK_HOLE } from './config.js';
+import { CAMERA, BOBBER, OBSTACLES, EFFECTS, FLY, SHOOT, PORTAL, LEVELS, HYPERSPACE, BLACK_HOLE, RINGS, COMBO } from './config.js';
 import { createScene, getChaseCameraPose } from './scene.js';
 import { createWorld, lakeCenterX, setLevel, getLevel, getTheme } from './world.js';
 import { createBobber } from './bobber.js';
-import { createCheckpoints } from './checkpoints.js';
+import { createCourse } from './course.js';
+import { createCombo } from './combo.js';
 import { createObstacles, setSplashHandler } from './obstacles.js';
 import { createWildlife } from './wildlife.js';
 import { createEffects } from './effects.js';
@@ -20,12 +21,13 @@ import { createShooter } from './shooting.js';
 import { createHyperspace } from './hyperspace.js';
 import { createUI } from './ui.js';
 import { loadSettings, saveSettings, applySettings, loadBestScores, recordScore } from './settings.js';
-import { playChime, playFanfare, playBuzz, playSplash, playGameOver, playDing, playGoldenDing, setMuted, setThrust, playPlop, playZap, playPoof, playFall, setAmbientTheme, playReload, setPortalHum, playHyperspace, playBlackHole, playToyDrop, playToyMerge } from './audio.js';
+import { playChime, playFanfare, playSplash, playGameOver, playComboDing, playMultiplierUp, playComboBreak, playGoldenDing, setMuted, setThrust, playPlop, playZap, playPoof, playFall, setAmbientTheme, playReload, setPortalHum, playHyperspace, playBlackHole, playToyDrop, playToyMerge } from './audio.js';
 
 const canvas = document.getElementById('game');
 const { renderer, scene, camera, followWithSun, applyTheme } = createScene(canvas);
 const bobber = createBobber(scene, camera, canvas);
-const checkpoints = createCheckpoints(scene);
+const course = createCourse(scene);
+const combo = createCombo();
 const obstacles = createObstacles(scene);
 const effects = createEffects(scene);
 const coins = createCoins(scene);
@@ -77,8 +79,9 @@ function loadLevel(index) {
 // Sets up the course for the current level: new gates, new obstacles, bobber at the start.
 function setUpCourse() {
   if (loadedLevel !== game.levelIndex) loadLevel(game.levelIndex);
-  checkpoints.reset(); // new random gate layout...
-  obstacles.build(OBSTACLES.count, checkpoints.getGateCenters()); // ...and new obstacles around it
+  course.reset(); // new ring gates...
+  obstacles.build(OBSTACLES.count, course.getRingSpots()); // ...and new obstacles around them
+  combo.reset();
   bobber.reset(0, BOBBER.startZ);
   bobber.setVisible(true);
   coins.clear();
@@ -86,7 +89,6 @@ function setUpCourse() {
   snapCamera();
   resetHUD();
   ui.setPaused(false);
-  ui.setWarning(null);
 }
 
 function goToTitle() {
@@ -248,7 +250,7 @@ function togglePause() {
 // Flew through the portal: show this level's score. If there's another level, the
 // button warps you there; after the last level, it's the final victory screen.
 function showLevelComplete() {
-  const result = game.finalScore();
+  const result = game.finalScore(combo.best);
   game.runTotal += result.total;
   const next = LEVELS[game.levelIndex + 1];
   if (next) {
@@ -263,7 +265,7 @@ function showLevelComplete() {
 function showGameOver() {
   const total = game.runScoreSoFar();
   const isNewBest = recordScore(settings.difficulty, total);
-  ui.showGameOver(total, checkpoints.passed, checkpoints.total, getLevel().name, isNewBest);
+  ui.showGameOver(total, combo.best, getLevel().name, isNewBest);
 }
 
 // ----- Menu buttons -----
@@ -319,17 +321,12 @@ window.addEventListener('keydown', (e) => {
 
 // Puts every HUD number back to its starting value.
 function resetHUD() {
-  ui.setCheckpoints(0, checkpoints.total);
   ui.setLives(game.lives, game.maxLives);
   ui.setScore(0);
   ui.setTimer(formatTime(0));
   ui.setProgress(0);
-  ui.setProgressCheckpoints(gateFractions(), 0);
-}
-
-// How far along the course each checkpoint is (0 = start, 1 = portal), for the progress bar.
-function gateFractions() {
-  return checkpoints.getGateCenters().map((g) => g.z / getLevel().finishZ);
+  ui.setProgressTicks(course.progressTicks());
+  ui.setCombo(0, 1, 0);
 }
 
 // Adds points to the score and shows the little "+10" pop.
@@ -338,33 +335,47 @@ function scorePoints(amount) {
   ui.popPoints(amount);
 }
 
-// React to what the checkpoints reported this frame.
-function handleCourseEvent(event) {
-  if (!event) return;
-  if (event.checkpoint) {
+// ---------------------------------------------------------------------------
+// The combo
+// ---------------------------------------------------------------------------
+// Shows and plays what happened when the combo grew (from combo.add()).
+function comboFeedback(result) {
+  if (result.multiplierUp) {
+    playMultiplierUp(combo.multiplier);
+    ui.bigPop(`×${combo.multiplier} COMBO!`);
+  }
+  if (result.milestone) {
+    ui.bigPop(result.milestone, 'milestone');
+    effects.sparkle(bobber.position.x, bobber.mesh.position.y + 2, bobber.position.z, true);
+  }
+}
+
+// Called every frame: the combo timer counts down, and the HUD shows it.
+function updateCombo(dt) {
+  if (game.state === 'playing') {
+    const lost = combo.update(dt); // how big the combo was when it ran out (0 = still going)
+    if (lost >= COMBO.perStep) playComboBreak();
+  }
+  ui.setCombo(combo.count, combo.multiplier, combo.timerFraction);
+}
+
+// ---------------------------------------------------------------------------
+// Ring gates and the portal
+// ---------------------------------------------------------------------------
+function updateCourse(dt, time) {
+  const rings = course.update(dt, time, previousPosition, bobber.position, bobber.mesh.position.y, game.state === 'playing');
+  for (const r of rings) {
+    // Through a ring: points (times the combo), a combo boost and a free zap.
+    const result = combo.add(RINGS.comboBoost);
+    scorePoints(game.addRing(combo.multiplier));
+    shooter.addAmmo(RINGS.zaps);
     playChime();
-    effects.sparkle(bobber.position.x, bobber.mesh.position.y + 1, bobber.position.z, true);
-    scorePoints(game.addCheckpoint());
-    shooter.addAmmo(SHOOT.checkpointBonus); // checkpoints earn extra zaps
-    ui.setCheckpoints(event.checkpoint, checkpoints.total);
-    ui.setProgressCheckpoints(gateFractions(), event.checkpoint);
-    ui.showToast(`Checkpoint ${event.checkpoint}! +${SHOOT.checkpointBonus} zaps`);
-    ui.setWarning(null);
-  } else if (event.missed) {
-    playBuzz();
-    scorePoints(game.addMissedCheckpoint());
-    ui.setWarning(`↩ Go back for checkpoint ${event.missed}`);
-    ui.showToast(`Missed checkpoint ${event.missed}! Turn back and go between the buoys.`, 3);
-  } else if (event.wrongGate) {
-    playBuzz();
-    scorePoints(game.addMissedCheckpoint());
-    ui.setWarning(`↩ Go back for checkpoint ${event.need}`);
-    ui.showToast(`That's gate ${event.wrongGate}. Go back for checkpoint ${event.need}!`, 3);
-  } else if (event.missedCheckpoints) {
-    playBuzz();
-    ui.setWarning(`↩ Go back for checkpoint ${event.missedCheckpoints}`);
-    ui.showToast(`You can't finish yet. Go back for checkpoint ${event.missedCheckpoints}!`, 3);
-  } else if (event.finished) {
+    effects.sparkle(r.x, r.y, r.z, true);
+    ui.bigPop(r.inAir ? 'SKY RING!' : 'RING!', 'ring');
+    comboFeedback(result);
+    ui.setProgressTicks(course.progressTicks());
+  }
+  if (game.state === 'playing' && course.reachedPortal(previousPosition, bobber.position)) {
     game.state = 'won';
     playFanfare();
     const fz = getLevel().finishZ;
@@ -379,20 +390,27 @@ function handleCourseEvent(event) {
 // ---------------------------------------------------------------------------
 function updateCoins(dt, time) {
   const playing = game.state === 'playing';
-  const picked = coins.update(dt, time, bobber, obstacles.isClear, playing, playing && !game.isRespawning());
+  // Trails are laid out on the title screen too, as scenery.
+  const canSpawn = playing || game.state === 'title';
+  const picked = coins.update(dt, time, bobber, obstacles.isClear, canSpawn, playing && !game.isRespawning());
   for (const p of picked) {
     effects.sparkle(p.x, p.y, p.z, p.kind !== 'coin');
     if (p.kind === 'zapPack') {
       playReload();
       shooter.addAmmo(SHOOT.packAmount);
       ui.showToast(`⚡ Zap Pack! +${SHOOT.packAmount} zaps`);
-    } else if (p.golden) {
-      playGoldenDing();
-      scorePoints(game.addGoldenLure());
-      ui.showToast('Golden Lure! +50');
     } else {
-      playDing();
-      scorePoints(game.addCoin());
+      // Coins and Golden Lures build the combo. Each "ding" is a little higher than the last!
+      const result = combo.add(p.golden ? 2 : 1);
+      playComboDing(combo.count);
+      if (p.golden) {
+        playGoldenDing();
+        scorePoints(game.addGoldenLure(combo.multiplier));
+        ui.bigPop('GOLDEN LURE!', 'ring');
+      } else {
+        scorePoints(game.addCoin(combo.multiplier));
+      }
+      comboFeedback(result);
     }
   }
 }
@@ -471,7 +489,7 @@ function updateBlackHoleFall(dt) {
   camera.updateProjectionMatrix();
   ui.setWarpTint(p * 0.7);
 
-  // Swallowed: flash, then lose a life (and respawn at the last checkpoint).
+  // Swallowed: flash, then lose a life (and respawn back on the lake).
   if (p >= 1 && !holeFall.flashed) {
     holeFall.flashed = true;
     ui.flash(() => {
@@ -494,7 +512,13 @@ function fellIntoSpace() {
   loseALife(getTheme().fallMessage);
 }
 
+// Where the last life was lost (the bobber comes back a little behind this spot).
+let lostLifeAtZ = 0;
+
 function loseALife(message) {
+  lostLifeAtZ = bobber.position.z;
+  // Getting hit breaks your combo.
+  if (combo.break() >= COMBO.perStep) playComboBreak();
   bobber.reset(bobber.position.x, bobber.position.z);
   bobber.setVisible(false);
   bobber.setControlsEnabled(false);
@@ -508,9 +532,10 @@ function loseALife(message) {
   }
 }
 
-// After the short splash pause: back to the last checkpoint, blinking and safe for a moment.
+// After the short splash pause: back on the lake a little behind where it happened,
+// blinking and safe for a moment.
 function respawn() {
-  const spot = checkpoints.getRespawnPoint();
+  const spot = course.respawnPoint(lostLifeAtZ);
   bobber.reset(spot.x, spot.z);
   bobber.setControlsEnabled(true);
   game.startInvincible();
@@ -615,8 +640,8 @@ function step(dt) {
     playPlop();
   }
   updateShooting(dt, time);
-  const event = checkpoints.update(previousPosition, bobber.position, time);
-  if (game.state === 'playing') handleCourseEvent(event);
+  updateCourse(dt, time);
+  updateCombo(dt);
   checkForHits();
 
   // The race timer starts the moment the bobber leaves the dock.

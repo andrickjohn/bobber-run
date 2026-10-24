@@ -544,7 +544,7 @@ const SHORE_MARGIN = {
   whirlpool: OBSTACLES.whirlpool.radius * 0.7,
 };
 
-// How big each type is (its reach), so bigger ones are kept further from checkpoints.
+// How big each type is (its reach), so bigger ones are kept further from ring gates.
 const SIZE = {
   bass: OBSTACLES.bass.jumpDistance / 2,
   pike: 0,
@@ -578,8 +578,8 @@ export function createObstacles(scene) {
   let list = [];
 
   // Remove the old obstacles and place a fresh set.
-  // gateCenters = checkpoint positions to keep clear.
-  function build(count, gateCenters) {
+  // keepClear = spots to stay away from (the ring gates).
+  function build(count, keepClear) {
     for (const o of list) scene.remove(o.group);
     list = [];
 
@@ -591,11 +591,11 @@ export function createObstacles(scene) {
     const slice = (zEnd - zStart) / count;
 
     // Is (x, z) a good spot? On a lake (not in a gap, not too near a lake's end)
-    // and far enough from every checkpoint.
+    // and far enough from every ring gate.
     function goodSpot(type, x, z) {
       if (!isOverLake(z, SIZE[type] + 6)) return false;
-      const safe = OBSTACLES.checkpointSafeRadius + SIZE[type];
-      return !gateCenters.some((g) => Math.hypot(g.x - x, g.z - z) < safe);
+      const safe = OBSTACLES.ringSafeRadius + SIZE[type];
+      return !keepClear.some((g) => Math.hypot(g.x - x, g.z - z) < safe);
     }
 
     types.forEach((type, i) => {

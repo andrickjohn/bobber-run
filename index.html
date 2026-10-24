@@ -34,7 +34,6 @@
         pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,0.4);
       }
       .hud { text-align: center; }
-      .hud-warning { color: #ffd0d0; font-size: 15px; margin-top: 2px; animation: pulse 0.8s infinite alternate; }
       @keyframes pulse { from { opacity: 1; } to { opacity: 0.45; } }
       /* ----- Menus (title, settings, pause, game over, victory) ----- */
       .menu {
@@ -187,7 +186,6 @@
       .points-pop.negative { color: #ff8a80; }
       @keyframes floatUp { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-30px); opacity: 0; } }
       .hud-sep { opacity: 0.6; margin: 0 4px; }
-      .hud-short { display: none; } /* phones show a 🚩 instead of the long label */
       .progress {
         position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
         width: min(520px, 70vw); display: flex; align-items: center; gap: 8px; pointer-events: none;
@@ -266,7 +264,6 @@
         .zap-dot { width: 8px; height: 8px; }
         .hud { top: 104px; font-size: 14px; padding: 4px 12px; white-space: nowrap; }
         .hud-long { display: none; }
-        .hud-short { display: inline; }
         .progress { bottom: auto; top: 136px; width: 60vw; }
         .toast { top: 160px; font-size: 14px; max-width: 80vw; text-align: center; }
         .mute-button { font-size: 12px; padding: 5px 9px; }
@@ -301,6 +298,48 @@
         body.touch .progress { width: 42vw; } /* leave room for the Fly/Zap buttons */
         .toast { top: 44px; }
       }
+      /* ----- Combo meter (under the score) ----- */
+      .combo { position: fixed; top: 96px; left: 14px; pointer-events: none; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.4); }
+      .combo-top { display: flex; align-items: baseline; gap: 6px; }
+      .combo-fire { font-size: 22px; }
+      .combo-mult { font-size: 32px; font-weight: 900; color: #ffe066; }
+      .combo-count { font-size: 14px; font-weight: 700; opacity: 0.9; }
+      .combo-track { width: 130px; height: 7px; border-radius: 4px; background: rgba(255,255,255,0.35); margin-top: 2px; overflow: hidden; }
+      .combo-fill { height: 100%; width: 0; background: #ffe066; border-radius: 4px; }
+      /* The multiplier gets hotter: yellow → orange → red → pink → white-hot */
+      .combo[data-level="2"] .combo-mult, .combo[data-level="2"] .combo-fill { color: #ffb347; background-color: #ffb347; }
+      .combo[data-level="3"] .combo-mult, .combo[data-level="3"] .combo-fill { color: #ff7043; background-color: #ff7043; }
+      .combo[data-level="4"] .combo-mult, .combo[data-level="4"] .combo-fill { color: #ff4fa3; background-color: #ff4fa3; }
+      .combo[data-level="5"] .combo-mult, .combo[data-level="5"] .combo-fill { color: #fff; background-color: #fff; }
+      .combo .combo-mult { background-color: transparent !important; }
+      .combo.bump { animation: bump 0.25s ease-out; }
+      @keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
+      body.title-mode .combo, body.warping .combo { display: none; }
+
+      /* ----- Big pop-up words in the middle of the screen ----- */
+      .big-pops { position: fixed; left: 0; right: 0; top: 34%; display: flex; flex-direction: column; align-items: center; pointer-events: none; z-index: 5; }
+      .big-pop {
+        font-size: 44px; font-weight: 900; color: #ffe066; letter-spacing: 1px;
+        -webkit-text-stroke: 2px rgba(120, 50, 0, 0.6); text-shadow: 0 4px 12px rgba(0,0,0,0.35);
+        animation: big-pop 1.1s ease-out forwards;
+      }
+      .big-pop.ring { color: #7df9ff; -webkit-text-stroke-color: rgba(0, 60, 90, 0.6); font-size: 36px; }
+      .big-pop.milestone { color: #ff6bd6; font-size: 60px; }
+      @keyframes big-pop {
+        0% { transform: scale(0.3); opacity: 0; }
+        20% { transform: scale(1.25); opacity: 1; }
+        35% { transform: scale(1); }
+        75% { opacity: 1; }
+        100% { transform: translateY(-50px) scale(1); opacity: 0; }
+      }
+      @media (max-width: 720px) {
+        .combo { top: 70px; left: 10px; }
+        .combo-mult { font-size: 24px; }
+        .combo-track { width: 100px; }
+        .big-pop { font-size: 32px; }
+        .big-pop.milestone { font-size: 42px; }
+      }
+      @media (max-height: 500px) { .combo { top: 66px; } }
       .hidden { display: none !important; } /* always wins, even over more specific layout rules */
     </style>
   </head>

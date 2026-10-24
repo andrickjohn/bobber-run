@@ -2,7 +2,7 @@
 // The bobber's zapper. Press F (or the right mouse button, or the on-screen Shoot button)
 // to fire glowing zaps toward where you're aiming. A zap that hits a fish, turtle, lure or
 // log knocks it out with a "poof". You carry a few zaps, and they reload over time.
-// Zap Packs and checkpoints give extra zaps, up to SHOOT.maxCarry.
+// Zap Packs and ring gates give extra zaps, up to SHOOT.maxCarry.
 
 import * as THREE from 'three';
 import { SHOOT, COLORS } from './config.js';
@@ -120,7 +120,7 @@ export function createShooter(scene, canvas) {
     reloadTimer = 0;
   }
 
-  // Earned zaps (Zap Pack, checkpoint). Can go above the normal reload amount.
+  // Earned zaps (Zap Pack, ring gate). Can go above the normal reload amount.
   function addAmmo(amount) {
     ammo = Math.min(SHOOT.maxCarry, ammo + amount);
   }
