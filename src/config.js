@@ -48,11 +48,11 @@ export const BOBBER = {
   radius: 0.8,
   speedSetting: 5,     // 1–10, the "Bobber Speed" slider (5 = normal)
   maxSpeed: 16,        // top speed at setting 5 (units per second)
-  acceleration: 24,    // strongest pull toward the cursor at setting 5
+  acceleration: 55,    // strongest pull toward the cursor at setting 5 (higher = snappier)
   pullScreenDistance: 0.3, // cursor this far from the bobber ON SCREEN gives the full pull
                            // (1.0 = half the screen height), same forward and backward
   deadZone: 1.2,       // cursor closer than this does nothing (stops jitter)
-  drag: 1.4,           // water drag: higher = stops sooner
+  drag: 3.3,           // water drag: higher = stops sooner (a little glide, not a long slide)
   bounce: 0.4,         // how much speed is kept when bumping the shoreline
   bobHeight: 0.15,     // extra up/down bobbing on top of the waves
   bobSpeed: 3,
@@ -213,7 +213,7 @@ export const LEVELS = [
     finishZ: -400,
     bend: 18,       // the curviest lake yet
     widthWiggle: 14,
-    drag: 0.6,      // icy, slippery water: the bobber slides much farther (normal is BOBBER.drag)
+    drag: 1.2,      // icy, slippery water: the bobber slides much farther (normal is BOBBER.drag)
   },
 ];
 
@@ -362,7 +362,7 @@ export const OBSTACLES = {
   },
   whirlpool: {
     radius: 9,           // pull reaches this far
-    pull: 14,            // pull strength at the center (the bobber's own pull is 24)
+    pull: 32,            // pull strength at the center (the bobber's own pull is 55)
     swirl: 6,            // sideways spinning push
     pikeChance: 0.6,     // chance a pike circles in the middle waiting for you
   },
@@ -480,7 +480,7 @@ export const CAMERA = {
   height: 11,          // how high above the bobber the chase camera sits
   distance: 18,        // how far behind the bobber
   lookAhead: 22,       // the camera looks at a point this far in front of the bobber
-  followSpeed: 4,      // higher = camera catches up faster (it never snaps)
+  followSpeed: 6,      // higher = camera catches up faster (it never snaps)
   sideFollow: 0.35,    // how much the camera slides left/right with the bobber (0–1).
                        // Less than 1 means a still cursor points at a fixed spot on the
                        // water, so the bobber goes there and stops (instead of drifting forever).
