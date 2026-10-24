@@ -329,8 +329,9 @@ export function createBobber(scene, camera, canvas) {
     // landing, then wobble back. It's a spring: it pulls toward the target height,
     // overshoots a little and settles.
     if (landingSpeed > 2) squash.y = Math.max(0.5, 1 - landingSpeed * 0.05);
-    const target = 1 + THREE.MathUtils.clamp(flight.vy * 0.03, -0.15, 0.3);
-    squash.speed += (target - squash.y) * 220 * dt; // pull toward the target
+    // (Named "stretchGoal", not "target": "target" is already the spot the mouse points at.)
+    const stretchGoal = 1 + THREE.MathUtils.clamp(flight.vy * 0.03, -0.15, 0.3);
+    squash.speed += (stretchGoal - squash.y) * 220 * dt; // pull toward the goal
     squash.speed *= Math.exp(-9 * dt); // and slow down, so it settles
     squash.y += squash.speed * dt;
     // Keep the same "amount" of bobber: taller means thinner (1 ÷ √height sideways).
