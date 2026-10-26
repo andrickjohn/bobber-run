@@ -123,6 +123,24 @@ export const COMBO = {
   milestones: { 10: 'NICE!', 25: 'GREAT!', 50: 'AWESOME!', 100: 'LEGENDARY!' },
 };
 
+// The start of every level: the camera swoops down from the sky while "3, 2, 1, GO!" counts.
+export const INTRO = {
+  beat: 0.75,        // seconds between 3... 2... 1... GO!
+  height: 45,        // how high above the normal camera spot the swoop starts
+  back: 35,          // and how far behind it
+};
+
+// Stars: up to 3 per world, for finishing, a big combo and not losing a life.
+export const STARS = {
+  comboGoal: 20,     // best combo needed for the combo star
+};
+
+// First-time tips: friendly cards that explain things the first time you see them.
+export const TIPS = {
+  seconds: 5,        // how long each tip stays on screen
+  gapLookAhead: 45,  // show the "fly over the gap" tip when a gap is this close
+};
+
 // The swirling portal at the end of every level
 export const PORTAL = {
   radius: 9,           // size of the ring
@@ -154,10 +172,12 @@ export const BLACK_HOLE = {
 
 // The hyperspace jump between worlds
 export const HYPERSPACE = {
-  countdown: 5,        // seconds the score screen shows before warping automatically
-  diveTime: 1.6,       // seconds diving into the portal, speeding up
+  diveTime: 1.3,       // seconds diving into the portal, speeding up
+  tunnelTime: 3.6,     // seconds flying through the hyperspace tunnel (your scores show here)
   arriveTime: 1.4,     // seconds slowing down in the new world
-  fovBoost: 50,        // how much wider the view stretches at top speed (degrees)
+  fovBoost: 70,        // how much wider the view stretches at top speed (degrees)
+  spin: 1.4,           // how fast the tunnel rolls around you (radians per second)
+  shake: 1.2,          // how much the camera rumbles while diving in
 };
 
 // ---------------------------------------------------------------------------

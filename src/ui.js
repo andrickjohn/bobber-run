@@ -1,6 +1,7 @@
 // ui.js
 // Everything drawn on top of the 3D view with HTML and CSS:
-//   - the HUD (heads-up display): title, score, combo meter, timer, lives, progress bar
+//   - the HUD (heads-up display): three panels (score + combo, world + timer + progress,
+//     lives + energy + zaps + cooler)
 //   - the menus: title screen, settings, pause, game over and victory
 //   - little pop-up notes ("toasts")
 //
@@ -22,53 +23,75 @@ export function createUI() {
     (listeners[action] || []).forEach((cb) => cb(data));
   }
 
-  // Game title in the top-left corner
-  const title = document.createElement('div');
-  title.className = 'title';
-  title.innerHTML = `Bobber Run<span class="byline">by Eliott</span>`;
-  document.body.appendChild(title);
-
-  // Score, under the title
-  const score = document.createElement('div');
-  score.className = 'score';
-  score.innerHTML = `<span id="score-value">0</span> <span class="score-label">points</span>`;
-  document.body.appendChild(score);
-
-  // Progress bar along the bottom: dock on the left, finish on the right
-  const progress = document.createElement('div');
-  progress.className = 'progress';
-  progress.innerHTML = `
-    <span class="progress-end">⚓</span>
-    <div class="progress-track" id="progress-track">
-      <div class="progress-fill" id="progress-fill"></div>
-      <div class="progress-marker" id="progress-marker"></div>
+  // ----- The in-game HUD: three tidy panels in one layer -----
+  //   left:   the game's name, your score and the combo meter
+  //   top:    world name, timer and the progress bar to the portal
+  //   right:  lives, flying energy, zaps and the cooler
+  const hudLayer = document.createElement('div');
+  hudLayer.className = 'hud-layer';
+  hudLayer.innerHTML = `
+    <div class="panel hud-left">
+      <div class="brand">Bobber Run<span>by Eliott</span></div>
+      <div class="score" id="score"><span id="score-value">0</span><span class="score-label">pts</span></div>
+      <div class="combo hidden" id="combo">
+        <div class="combo-top"><span class="combo-fire">🔥</span><span class="combo-mult" id="combo-mult">×1</span>
+          <span class="combo-count" id="combo-count">0 in a row</span></div>
+        <div class="combo-track"><div class="combo-fill" id="combo-fill"></div></div>
+      </div>
     </div>
-    <span class="progress-end">🏁</span>`;
-  document.body.appendChild(progress);
-
-  const hud = document.createElement('div');
-  hud.className = 'hud';
-  hud.innerHTML = `
-    <div class="hud-main"><span class="hud-long"><span id="level-name"></span> <span class="hud-sep">·</span></span>
-      ⏱ <span id="timer">0:00.0</span></div>`;
-  document.body.appendChild(hud);
-
-  // The combo meter, under the score: "🔥 ×3" with how many in a row, and a bar that
-  // drains. Grab the next coin before it empties!
-  const comboBox = document.createElement('div');
-  comboBox.className = 'combo hidden';
-  comboBox.innerHTML = `
-    <div class="combo-top"><span class="combo-fire">🔥</span><span class="combo-mult" id="combo-mult">×1</span>
-      <span class="combo-count" id="combo-count">0 in a row</span></div>
-    <div class="combo-track"><div class="combo-fill" id="combo-fill"></div></div>`;
-  document.body.appendChild(comboBox);
+    <div class="panel hud-top">
+      <div class="hud-top-row"><span id="level-name"></span><span class="dot">·</span><span class="clock">⏱ <span id="timer">0:00.0</span></span></div>
+      <div class="progress">
+        <span class="progress-end">⚓</span>
+        <div class="progress-track" id="progress-track">
+          <div class="progress-fill" id="progress-fill"></div>
+          <div class="progress-marker" id="progress-marker"></div>
+        </div>
+        <span class="progress-end">🌀</span>
+      </div>
+    </div>
+    <div class="panel hud-right">
+      <div class="lives" id="lives"></div>
+      <div class="energy"><span>⚡</span><div class="energy-track"><div class="energy-fill" id="energy-fill"></div></div></div>
+      <div class="ammo" id="ammo"></div>
+      <div class="cooler"><div class="cooler-label">🧊 Cooler</div><canvas id="cooler-canvas"></canvas></div>
+    </div>
+    <div class="toast hidden" id="toast"></div>`;
+  document.body.appendChild(hudLayer);
+  const score = hudLayer.querySelector('#score');
+  const comboBox = hudLayer.querySelector('#combo');
+  const coolerBox = hudLayer.querySelector('.cooler');
+  const lives = hudLayer.querySelector('#lives');
+  const ammo = hudLayer.querySelector('#ammo');
+  const toast = hudLayer.querySelector('#toast');
   let shownCount = 0;
+  let shownAmmo = -1;
+  let toastTimer = null;
 
-  // The cooler: caught fish stack up in it (drawn by cooler.js on this canvas).
-  const coolerBox = document.createElement('div');
-  coolerBox.className = 'cooler';
-  coolerBox.innerHTML = `<div class="cooler-label">🧊 Cooler</div><canvas id="cooler-canvas"></canvas>`;
-  document.body.appendChild(coolerBox);
+  // A soft dark edge around the screen that pulls your eye to the middle.
+  const vignette = document.createElement('div');
+  vignette.className = 'vignette';
+  document.body.appendChild(vignette);
+
+  // The big "3, 2, 1, GO!" numbers at the start of a level.
+  const countdown = document.createElement('div');
+  countdown.className = 'countdown hidden';
+  document.body.appendChild(countdown);
+
+  // First-time tips: a friendly card near the bottom of the screen.
+  const tip = document.createElement('div');
+  tip.className = 'tip';
+  document.body.appendChild(tip);
+  let tipTimer = null;
+
+  // The little score card that shows while you zoom through the hyperspace tunnel.
+  const warpCard = document.createElement('div');
+  warpCard.className = 'warp-card hidden';
+  document.body.appendChild(warpCard);
+  warpCard.addEventListener('click', (e) => {
+    const button = e.target.closest('[data-action]');
+    if (button) emit(button.dataset.action);
+  });
 
   // Big words that burst onto the middle of the screen ("×3 COMBO!", "RING!", "AWESOME!").
   const pops = document.createElement('div');
@@ -100,7 +123,7 @@ export function createUI() {
     if (button) emit(button.dataset.action, button.dataset.value);
   });
 
-  // Pause and Restart buttons in the top-right corner.
+  // Pause and Restart buttons in the top-right corner (part of the HUD layer).
   const buttons = document.createElement('div');
   buttons.className = 'top-buttons';
   const pauseButton = document.createElement('button');
@@ -112,31 +135,9 @@ export function createUI() {
   restartButton.innerHTML = '↻<span class="label"> Restart</span>';
   restartButton.title = 'Restart (R)';
   buttons.append(pauseButton, restartButton);
-  document.body.appendChild(buttons);
+  hudLayer.appendChild(buttons);
 
-  // Lives: a row of little bobber icons under the buttons.
-  const lives = document.createElement('div');
-  lives.className = 'lives';
-  document.body.appendChild(lives);
-
-  // Flying energy bar, under the lives.
-  const energy = document.createElement('div');
-  energy.className = 'energy';
-  energy.innerHTML = `<span>⚡</span><div class="energy-track"><div class="energy-fill" id="energy-fill"></div></div>`;
-  document.body.appendChild(energy);
-
-  // Zaps left: a row of little glowing dots under the energy bar.
-  const ammo = document.createElement('div');
-  ammo.className = 'ammo';
-  document.body.appendChild(ammo);
-  let shownAmmo = -1;
-
-  const toast = document.createElement('div');
-  toast.className = 'toast hidden';
-  document.body.appendChild(toast);
-  let toastTimer = null;
-
-  // Mute button in the bottom-right corner (shown on every screen, even the title).
+  // Mute button in the bottom-left corner (shown on every screen, even the title).
   const muteButton = document.createElement('button');
   muteButton.className = 'hud-button mute-button';
   muteButton.title = 'Sound on/off (M)';
@@ -208,6 +209,15 @@ export function createUI() {
     menu.innerHTML = html;
   }
 
+  // Three stars (filled in for the ones earned), plus the list of goals.
+  // stars = { earned: [true, false, true], goals: ['Reach the portal', ...] }
+  function starsHTML(stars) {
+    if (!stars) return '';
+    const icons = stars.earned.map((e) => `<span class="star ${e ? 'earned' : ''}">★</span>`).join('');
+    const goals = stars.goals.map((g, i) => `<li class="${stars.earned[i] ? 'done' : ''}">${g}</li>`).join('');
+    return `<div class="stars">${icons}</div><ul class="goals">${goals}</ul>`;
+  }
+
   function bestScoresHTML(best) {
     return Object.keys(DIFFICULTY)
       .map((d) => `<div class="best"><span>${DIFFICULTY[d].label}</span><b>${best[d] || '–'}</b></div>`)
@@ -224,9 +234,13 @@ export function createUI() {
     },
 
     // levels = the LEVELS list from config.js, for the "jump to a level" buttons.
-    showTitle(best, settings, levels) {
+    // stars = the most stars earned in each world, e.g. [3, 1, 0, 0].
+    showTitle(best, settings, levels, stars = []) {
       const levelButtons = levels
-        .map((lvl, i) => `<button class="choice" data-action="playLevel" data-value="${i}">${i + 1}. ${lvl.name}</button>`)
+        .map((lvl, i) => {
+          const n = stars[i] || 0;
+          return `<button class="choice" data-action="playLevel" data-value="${i}">${i + 1}. ${lvl.name}<small>${'★'.repeat(n)}${'☆'.repeat(3 - n)}</small></button>`;
+        })
         .join('');
       const touch = document.body.classList.contains('touch');
       showMenu(
@@ -326,22 +340,24 @@ export function createUI() {
     },
 
     // Through a portal with more levels to go.
-    showLevelComplete(breakdown, runTotal, levelName, nextName) {
+    showLevelComplete(breakdown, runTotal, levelName, nextName, stars) {
       showMenu(
         `<h1>${levelName} complete!</h1>
+        ${starsHTML(stars)}
         ${this.resultsTable(breakdown)}
         <p>Run total so far: <b>${runTotal}</b></p>
-        <p class="warp-countdown">🌀 Warping to <b>${nextName}</b> in <b id="warp-seconds">5</b>…</p>
         <div class="menu-buttons">
-          <button class="primary" data-action="nextLevel">🚀 Warp now</button>
+          <button class="primary" data-action="continueWarp">🚀 Keep warping to ${nextName}</button>
+          <button data-action="quit">⌂ Title</button>
         </div>`
       );
     },
 
     // Through the last portal: the whole run is done!
-    showVictory(breakdown, runTotal, isNewBest, best) {
+    showVictory(breakdown, runTotal, isNewBest, best, stars) {
       showMenu(
         `<h1>You beat every world!</h1>
+        ${starsHTML(stars)}
         ${this.resultsTable(breakdown)}
         <p class="big-number">${runTotal} <span>points total</span></p>
         ${isNewBest ? '<div class="new-best">★ New best! ★</div>' : `<div class="note">Best: ${best}</div>`}
@@ -367,10 +383,21 @@ export function createUI() {
       }, 600);
     },
 
-    // The seconds left before the automatic warp (on the level-complete screen).
-    setWarpCountdown(seconds) {
-      const el = document.getElementById('warp-seconds');
-      if (el) el.textContent = seconds;
+    // info = { levelName, nextName, stars (0-3), points, runTotal }
+    showWarpCard(info) {
+      warpCard.innerHTML = `
+        <div class="warp-card-title">${info.levelName} complete!</div>
+        <div class="warp-card-stars">${'<span class="star earned">★</span>'.repeat(info.stars)}${'<span class="star">★</span>'.repeat(3 - info.stars)}</div>
+        <div class="warp-card-points">+${info.points}<span> · run total ${info.runTotal}</span></div>
+        <div class="warp-card-next">Next stop: <b>${info.nextName}</b></div>
+        <div class="warp-card-buttons">
+          <button data-action="holdWarp">📋 Scores</button>
+          <button data-action="quit">⌂ Title</button>
+        </div>`;
+      warpCard.classList.remove('hidden');
+    },
+    hideWarpCard() {
+      warpCard.classList.add('hidden');
     },
 
     // Hide the HUD during the hyperspace jump, so it looks like a movie scene.
@@ -498,6 +525,31 @@ export function createUI() {
       pops.appendChild(pop);
       setTimeout(() => pop.remove(), 1100);
     },
+    // One number of the countdown ("3", "2", "1" or "GO!"). Empty text hides it.
+    showCountdown(text) {
+      countdown.classList.toggle('hidden', !text);
+      countdown.classList.toggle('go', text === 'GO!');
+      countdown.textContent = text;
+      countdown.classList.remove('tick');
+      void countdown.offsetWidth; // (restart the CSS animation)
+      countdown.classList.add('tick');
+    },
+
+    // A first-time tip card. html can use <b> for the important words.
+    showTip(icon, html, seconds) {
+      tip.innerHTML = `<span class="tip-icon">${icon}</span><span>${html}</span>`;
+      tip.classList.add('show');
+      clearTimeout(tipTimer);
+      tipTimer = setTimeout(() => tip.classList.remove('show'), seconds * 1000);
+    },
+    hideTip() {
+      clearTimeout(tipTimer);
+      tip.classList.remove('show');
+    },
+    get tipShowing() {
+      return tip.classList.contains('show');
+    },
+
     // A short note that pops up and disappears by itself.
     showToast(text, seconds = 1.5) {
       toast.textContent = text;

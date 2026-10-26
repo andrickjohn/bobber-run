@@ -685,3 +685,19 @@ export function playOverflow() {
   tone(160, 0, 0.4, 'square', 0.08);
   tone(110, 0.12, 0.5, 'square', 0.08);
 }
+
+// 3-2-1-GO! beeps: three short "boops", then a higher, longer "GO!" (like a race start).
+export function playCountBeep(go) {
+  if (go) {
+    tone(1047, 0, 0.5, 'square', 0.1);
+    tone(1568, 0, 0.5, 'triangle', 0.15);
+  } else {
+    tone(523, 0, 0.18, 'square', 0.1);
+  }
+}
+
+// A soft "bloop" when a tip card slides in.
+export function playTip() {
+  tone(660, 0, 0.12, 'sine', 0.12);
+  tone(990, 0.08, 0.18, 'sine', 0.1);
+}

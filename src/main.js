@@ -5,10 +5,11 @@
 // the main loop: update everything, check for hits, move the camera, draw a frame, repeat
 // (about 60 times a second).
 
+import './style.css'; // how the HUD and menus look
 import * as THREE from 'three';
-import { CAMERA, BOBBER, OBSTACLES, EFFECTS, FLY, SHOOT, PORTAL, LEVELS, HYPERSPACE, BLACK_HOLE, RINGS, COMBO, CATCH } from './config.js';
+import { CAMERA, BOBBER, OBSTACLES, EFFECTS, FLY, SHOOT, PORTAL, LEVELS, HYPERSPACE, BLACK_HOLE, RINGS, COMBO, CATCH, INTRO, STARS, TIPS } from './config.js';
 import { createScene, getChaseCameraPose } from './scene.js';
-import { createWorld, lakeCenterX, setLevel, getLevel, getTheme } from './world.js';
+import { createWorld, lakeCenterX, setLevel, getLevel, getTheme, isOverLake } from './world.js';
 import { createBobber } from './bobber.js';
 import { createCourse } from './course.js';
 import { createCombo } from './combo.js';
@@ -22,8 +23,8 @@ import { createCoins } from './coins.js';
 import { createShooter } from './shooting.js';
 import { createHyperspace } from './hyperspace.js';
 import { createUI } from './ui.js';
-import { loadSettings, saveSettings, applySettings, loadBestScores, recordScore } from './settings.js';
-import { playChime, playFanfare, playSplash, playGameOver, playComboDing, playMultiplierUp, playComboBreak, playGoldenDing, setMuted, setThrust, playPlop, playZap, playPoof, playFall, setAmbientTheme, playReload, setPortalHum, playHyperspace, playBlackHole, playToyDrop, playToyMerge, playCatch, playCoolerPop, playOverflow } from './audio.js';
+import { loadSettings, saveSettings, applySettings, loadBestScores, recordScore, loadStars, recordStars, loadTipsSeen, saveTipsSeen } from './settings.js';
+import { playChime, playFanfare, playSplash, playGameOver, playComboDing, playMultiplierUp, playComboBreak, playGoldenDing, setMuted, setThrust, playPlop, playZap, playPoof, playFall, setAmbientTheme, playReload, setPortalHum, playHyperspace, playBlackHole, playToyDrop, playToyMerge, playCatch, playCoolerPop, playOverflow, playCountBeep, playTip } from './audio.js';
 
 const canvas = document.getElementById('game');
 const { renderer, scene, camera, followWithSun, applyTheme } = createScene(canvas);
@@ -100,19 +101,21 @@ function setUpCourse() {
 }
 
 function goToTitle() {
-  clearInterval(countdownTimer);
+  intro = null;
+  ui.showCountdown('');
+  ui.hideTip();
+  stopWarp();
   applySettings(settings);
   game.newRun(0);
   setUpCourse();
   game.state = 'title';
   bobber.setControlsEnabled(false);
   ui.setTitleMode(true);
-  ui.showTitle(loadBestScores(), settings, LEVELS);
+  ui.showTitle(loadBestScores(), settings, LEVELS, loadStars());
 }
 
 // Start a new run. levelIndex lets the title screen start straight at a later level.
 function startGame(levelIndex = 0) {
-  clearInterval(countdownTimer);
   applySettings(settings); // difficulty and obstacle count take effect here
   game.newRun(levelIndex);
   beginLevel();
@@ -122,58 +125,136 @@ function startGame(levelIndex = 0) {
 function beginLevel() {
   livesAtLevelStart = game.lives;
   setUpCourse();
-  game.state = 'playing';
-  bobber.setControlsEnabled(true);
   ui.setTitleMode(false);
   ui.hideMenu();
+  ui.hideTip();
   ui.setLevelName(getLevel().name);
   ui.showToast(`Level ${game.levelIndex + 1}: ${getLevel().name}`, 2.5);
+  startCountdown();
+}
+
+// ---------------------------------------------------------------------------
+// 3, 2, 1, GO! The camera swoops down from the sky to behind the bobber while the
+// numbers count down. You can't steer (and the clock doesn't run) until GO.
+// ---------------------------------------------------------------------------
+let intro = null; // the countdown in progress: { t = seconds so far, beat = last number shown }
+const swoopFrom = new THREE.Vector3();
+
+function startCountdown() {
+  game.state = 'countdown';
+  bobber.setControlsEnabled(false);
+  intro = { t: 0, beat: -1 };
+}
+
+function updateCountdown(dt) {
+  intro.t += dt;
+  // The swoop: from high up and far behind, down to the normal chase-camera spot.
+  const p = Math.min(1, intro.t / (INTRO.beat * 3));
+  const e = 1 - (1 - p) * (1 - p) * (1 - p); // "ease out": fast at first, then gently settles
+  placeCamera(bobber.position);
+  swoopFrom.set(wantedPosition.x, wantedPosition.y + INTRO.height, wantedPosition.z + INTRO.back);
+  cameraBase.lerpVectors(swoopFrom, wantedPosition, e);
+  camera.position.copy(cameraBase);
+  cameraLookAt.copy(wantedLookAt);
+  camera.lookAt(cameraLookAt);
+
+  // beat 0, 1, 2 show "3", "2", "1"; beat 3 is GO!
+  const beat = Math.floor(intro.t / INTRO.beat);
+  if (beat === intro.beat) return;
+  intro.beat = beat;
+  if (beat < 3) {
+    ui.showCountdown(String(3 - beat));
+    playCountBeep(false);
+  } else {
+    go();
+  }
+}
+
+// GO! Hand the controls to the player.
+function go() {
+  intro = null;
+  game.state = 'playing';
+  bobber.setControlsEnabled(true);
+  ui.showCountdown('GO!');
+  playCountBeep(true);
+  setTimeout(() => game.state !== 'countdown' && ui.showCountdown(''), 900);
+  const touch = document.body.classList.contains('touch');
+  tip('steer', touch ? '👆' : '👉', touch
+    ? 'Drag your finger to <b>steer</b>. Swoop through the coin trails!'
+    : 'Move the <b>mouse</b> (or arrow keys) to steer. Swoop through the coin trails!');
+}
+
+// ---------------------------------------------------------------------------
+// First-time tips: each one shows once (ever), the first time it's useful.
+// ---------------------------------------------------------------------------
+const tipsSeen = loadTipsSeen();
+const tipQueue = [];
+
+// Asks for a tip. It waits its turn if another tip is showing. urgent = show it right away.
+function tip(id, icon, html, urgent = false) {
+  if (tipsSeen.has(id) || tipQueue.some((t) => t.id === id)) return;
+  if (urgent) tipQueue.unshift({ id, icon, html });
+  else tipQueue.push({ id, icon, html });
+  if (urgent) ui.hideTip();
+}
+
+function updateTips() {
+  if (game.state !== 'playing') return;
+  // Fly tip: when a gap in the water is coming up and you're not flying yet.
+  // (Past the portal there's no water either, but that's not a gap.)
+  const ahead = bobber.position.z - TIPS.gapLookAhead;
+  if (!tipsSeen.has('fly') && !bobber.flight.flying && ahead > getLevel().finishZ &&
+      isOverLake(bobber.position.z, 0) && !isOverLake(ahead, 0)) {
+    const touch = document.body.classList.contains('touch');
+    tip('fly', '🚀', touch ? 'Gap ahead! Hold <b>FLY</b> to soar over it.' : 'Gap ahead! Hold <b>Space</b> to fly over it.', true);
+  }
+  // Catch tip: when a school of little fish is close ahead.
+  if (!tipsSeen.has('catch') && catchFish.list.some((f) => {
+    const dz = bobber.position.z - f.mesh.position.z;
+    return dz > 0 && dz < 35;
+  })) {
+    tip('catch', '🐟', 'Bump into the little <b>colored fish</b> to catch them for your cooler.');
+  }
+  if (ui.tipShowing || tipQueue.length === 0) return;
+  const next = tipQueue.shift();
+  tipsSeen.add(next.id);
+  saveTipsSeen(tipsSeen);
+  ui.showTip(next.icon, next.html, TIPS.seconds);
+  playTip();
 }
 
 // R / Restart: start this level over (with the lives you had when it began).
 function restartLevel() {
   if (game.state === 'title' || game.state === 'warping' || game.state === 'blackhole') return;
-  clearInterval(countdownTimer);
   game.lives = livesAtLevelStart;
   game.reset();
   beginLevel();
 }
 
 // ---------------------------------------------------------------------------
-// The hyperspace jump to the next world
+// The hyperspace jump to the next world (it starts the moment you fly into the portal)
 // ---------------------------------------------------------------------------
-// 1. "dive":   the camera rushes into the portal, the view stretches wider and wider,
-//              star streaks speed past and the screen glows blue.
-// 2. Flash:    the screen goes white, and the next world is built behind it.
-// 3. "arrive": the streaks slow down and the view settles behind the bobber.
-let warp = null;          // the jump in progress (null when not warping)
-let countdownTimer = null;
-
-// The level-complete screen counts down, then warps by itself.
-function startWarpCountdown() {
-  let secondsLeft = HYPERSPACE.countdown;
-  ui.setWarpCountdown(secondsLeft);
-  clearInterval(countdownTimer);
-  countdownTimer = setInterval(() => {
-    secondsLeft--;
-    ui.setWarpCountdown(Math.max(0, secondsLeft));
-    if (secondsLeft <= 0) enterPortal();
-  }, 1000);
-}
+// 1. "dive":   the camera rushes into the portal, rumbling, the view stretches wider and
+//              wider, star streaks speed past and the screen glows blue.
+// 2. "tunnel": zooming through a glowing, spinning tunnel. A little card shows how you did
+//              (stars and points). Press "Scores" to stop and look at everything.
+// 3. Flash:    the screen goes white, and the next world is built behind it.
+// 4. "arrive": the streaks slow down and the view settles behind the bobber. GO!
+let warp = null;        // the jump in progress (null when not warping)
+let levelResult = null; // the score breakdown of the world we just finished
 
 function enterPortal() {
   if (warp || game.state !== 'won') return;
-  clearInterval(countdownTimer);
-  ui.hideMenu();
   ui.setWarpMode(true);
   game.state = 'warping';
   bobber.setVisible(false);
-  playHyperspace(HYPERSPACE.diveTime);
+  playHyperspace(HYPERSPACE.diveTime + HYPERSPACE.tunnelTime);
   const fz = getLevel().finishZ;
   const portal = new THREE.Vector3(lakeCenterX(fz), PORTAL.centerHeight, fz);
   warp = {
     phase: 'dive',
     t: 0,
+    held: false,                                       // stopped to look at the scores
     from: camera.position.clone(),                     // where the camera starts
     to: portal.clone().add(new THREE.Vector3(0, 0, -8)), // just through the portal
     lookAt: portal.clone().add(new THREE.Vector3(0, 0, -80)), // look straight through it
@@ -182,19 +263,38 @@ function enterPortal() {
 }
 
 function updateWarp(dt) {
-  warp.t += dt;
+  if (!warp.held) warp.t += dt;
   const baseFov = camera.userData.baseFov;
   if (warp.phase === 'dive') {
     const p = Math.min(1, warp.t / HYPERSPACE.diveTime);
     const e = p * p * p; // "ease in": starts slow and ends REALLY fast
     camera.position.lerpVectors(warp.from, warp.to, e);
+    // Rumble harder and harder as we speed up
+    camera.position.x += (Math.random() - 0.5) * HYPERSPACE.shake * e;
+    camera.position.y += (Math.random() - 0.5) * HYPERSPACE.shake * e;
     camera.lookAt(warp.lookAt);
     camera.fov = baseFov + HYPERSPACE.fovBoost * e;
     hyperspace.intensity = p;
+    hyperspace.tunnel = (p - 0.7) / 0.3; // the tunnel fades in over the last part of the dive
+    hyperspace.endGlow = hyperspace.tunnel * 0.8;
     ui.setWarpTint(p * 0.85);
-    // Start the white flash a little before the end; the new world loads while it's white.
-    if (!warp.flashed && warp.t > HYPERSPACE.diveTime - 0.6) {
+    if (p >= 1) {
+      warp.phase = 'tunnel';
+      warp.t = 0;
+      ui.bigPop('WARP SPEED!', 'milestone');
+      ui.showWarpCard(warpCardInfo());
+    }
+  } else if (warp.phase === 'tunnel') {
+    const p = Math.min(1, warp.t / HYPERSPACE.tunnelTime);
+    hyperspace.intensity = 1;
+    hyperspace.tunnel = 1;
+    hyperspace.endGlow = 0.8 + 0.2 * p; // the light at the end gets brighter
+    camera.fov = baseFov + HYPERSPACE.fovBoost * (0.85 + 0.15 * Math.sin(warp.t * 9)); // pulsing
+    ui.setWarpTint(0.45 + 0.2 * Math.sin(warp.t * 6));
+    // Into the light: flash white and build the next world while the screen is white.
+    if (!warp.flashed && warp.t > HYPERSPACE.tunnelTime - 0.6) {
       warp.flashed = true;
+      ui.hideWarpCard();
       ui.flash(arriveInNextLevel);
     }
   } else {
@@ -202,27 +302,72 @@ function updateWarp(dt) {
     const e = 1 - (1 - p) * (1 - p) * (1 - p); // "ease out": fast at first, then gently
     camera.fov = baseFov + HYPERSPACE.fovBoost * (1 - e);
     hyperspace.intensity = 1 - p;
+    hyperspace.tunnel = 1 - p * 4; // the tunnel is gone almost right away
+    hyperspace.endGlow = hyperspace.tunnel;
     ui.setWarpTint((1 - p) * 0.85);
     if (p >= 1) {
       // Arrived! Hand control back to the player.
-      warp = null;
-      camera.fov = baseFov;
-      game.state = 'playing';
-      bobber.setControlsEnabled(true);
-      ui.setWarpMode(false);
+      stopWarp();
       ui.showToast(`Level ${game.levelIndex + 1}: ${getLevel().name}`, 2.5);
+      go(); // no countdown after hyperspace: you arrive already moving, so just GO!
     }
   }
   camera.updateProjectionMatrix();
 }
 
+// Ends (or cancels) the warp and puts everything back to normal.
+function stopWarp() {
+  warp = null;
+  hyperspace.intensity = 0;
+  hyperspace.tunnel = 0;
+  hyperspace.endGlow = 0;
+  if (camera.userData.baseFov) {
+    camera.fov = camera.userData.baseFov;
+    camera.updateProjectionMatrix();
+  }
+  ui.setWarpTint(0);
+  ui.hideWarpCard();
+  ui.setWarpMode(false);
+}
+
+// What the little card in the tunnel shows.
+function warpCardInfo() {
+  return {
+    levelName: getLevel().name,
+    nextName: LEVELS[game.levelIndex + 1].name,
+    stars: starsEarned().earned.filter(Boolean).length,
+    points: levelResult.total,
+    runTotal: game.runTotal,
+  };
+}
+
+// "Scores" button: stop in the tunnel and show the full score breakdown.
+function holdWarp() {
+  if (!warp || warp.phase !== 'tunnel' || warp.flashed) return;
+  warp.held = true;
+  ui.hideWarpCard();
+  ui.showLevelComplete(levelResult, game.runTotal, getLevel().name, LEVELS[game.levelIndex + 1].name, starsEarned());
+}
+
+// "Keep warping": back into the tunnel, with a moment left before the flash.
+function continueWarp() {
+  if (!warp || !warp.held) return;
+  warp.held = false;
+  warp.t = Math.min(warp.t, HYPERSPACE.tunnelTime - 1.2);
+  ui.hideMenu();
+}
+
 // Called while the screen is white: build the next world and put the bobber at its start.
 function arriveInNextLevel() {
+  if (!warp) return; // (quit to the title during the flash)
   game.levelIndex++;
   game.reset(); // new score and timer for this level; lives carry over
   beginLevel();
   game.state = 'warping'; // ...but keep warping until we've slowed down
+  intro = null; // (no swoop: the warp is the intro)
+  ui.showCountdown('');
   bobber.setControlsEnabled(false);
+  ui.setWarpMode(true);
   warp.phase = 'arrive';
   warp.t = 0;
 }
@@ -239,7 +384,7 @@ function showSettingsScreen() {
 
 function closeSettings() {
   if (settingsReturnTo === 'pause') ui.showPause();
-  else ui.showTitle(loadBestScores(), settings, LEVELS);
+  else ui.showTitle(loadBestScores(), settings, LEVELS, loadStars());
 }
 
 // Pausing only works while racing.
@@ -260,14 +405,23 @@ function togglePause() {
 function showLevelComplete() {
   const result = game.finalScore(combo.best);
   game.runTotal += result.total;
-  const next = LEVELS[game.levelIndex + 1];
-  if (next) {
-    ui.showLevelComplete(result, game.runTotal, getLevel().name, next.name);
-    startWarpCountdown();
+  const stars = starsEarned();
+  recordStars(game.levelIndex, stars.earned.filter(Boolean).length);
+  levelResult = result;
+  if (LEVELS[game.levelIndex + 1]) {
+    enterPortal(); // straight into hyperspace: the scores show on the way
   } else {
     const isNewBest = recordScore(settings.difficulty, game.runTotal);
-    ui.showVictory(result, game.runTotal, isNewBest, loadBestScores()[settings.difficulty]);
+    ui.showVictory(result, game.runTotal, isNewBest, loadBestScores()[settings.difficulty], stars);
   }
+}
+
+// The 3 stars for a world: finish it, get a big combo, and don't lose a life.
+function starsEarned() {
+  return {
+    earned: [true, combo.best >= STARS.comboGoal, game.lives >= livesAtLevelStart],
+    goals: ['Reach the portal', `Get a ${STARS.comboGoal}+ combo`, "Don't lose a life"],
+  };
 }
 
 function showGameOver() {
@@ -279,7 +433,8 @@ function showGameOver() {
 // ----- Menu buttons -----
 ui.on('play', () => startGame(0));
 ui.on('playLevel', (index) => startGame(Number(index)));
-ui.on('nextLevel', enterPortal);
+ui.on('holdWarp', holdWarp);
+ui.on('continueWarp', continueWarp);
 ui.on('settings', openSettings);
 ui.on('back', closeSettings);
 ui.on('resume', togglePause);
@@ -391,6 +546,7 @@ function updateCourse(dt, time) {
     ui.bigPop(r.inAir ? 'SKY RING!' : 'RING!', 'ring');
     comboFeedback(result);
     ui.setProgressTicks(course.progressTicks());
+    tip('ring', '⭕', 'Ring gates give <b>big points</b>, a combo boost and a free zap. Some are up in the sky!');
   }
   // The portal opens once you're far enough along the course.
   if (game.state === 'playing' && !portalOpen && bobber.position.z < getLevel().finishZ * PORTAL.openAt) {
@@ -398,6 +554,7 @@ function updateCourse(dt, time) {
     world.openPortal();
     playMultiplierUp(6);
     ui.bigPop('PORTAL OPEN!', 'ring');
+    tip('portal', '🌀', 'The <b>portal</b> is open at the end of the course. Fly into it to finish the world!');
   }
   if (game.state === 'playing' && course.reachedPortal(previousPosition, bobber.position)) {
     game.state = 'won';
@@ -427,6 +584,7 @@ function updateCoins(dt, time) {
       // Coins and Golden Lures build the combo. Each "ding" is a little higher than the last!
       const result = combo.add(p.golden ? 2 : 1);
       playComboDing(combo.count);
+      tip('combo', '🔥', 'Grab coins <b>quickly, one after another</b> for a combo. Every 5 in a row raises your <b>multiplier</b>!');
       bobber.boing(p.golden ? 1.5 : 0.6);
       if (p.golden) {
         playGoldenDing();
@@ -456,6 +614,7 @@ function catchIntoCooler(color, x, y, z) {
   bobber.boing(1);
   cooler.add(color);
   playCatch();
+  tip('cooler', '🧊', 'Caught one! Line up <b>3 of the same color</b> in your cooler to POP them. Don\'t let it fill up!');
   effects.splash(x, Math.max(0, y - 0.3), z, 0.4);
   effects.sparkle(x, y + 0.5, z);
 }
@@ -612,6 +771,8 @@ function respawn() {
   bobber.setControlsEnabled(true);
   game.startInvincible();
   snapCamera();
+  const touch = document.body.classList.contains('touch');
+  tip('zap', '⚡', touch ? 'Tap <b>ZAP</b> to blast obstacles out of your way.' : 'Press <b>F</b> to zap obstacles out of your way.');
 }
 
 // ---------------------------------------------------------------------------
@@ -726,7 +887,9 @@ function step(dt) {
   ui.setEnergy(f.energy, !f.flying && f.energy < FLY.minEnergyToFly);
   if (game.state === 'playing' && !game.isRespawning()) bobber.setVisible(game.blinkVisible());
 
-  updateCamera(dt);
+  updateTips();
+  if (game.state === 'countdown') updateCountdown(dt);
+  else updateCamera(dt);
   followWithSun(bobber.position);
 }
 

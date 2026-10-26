@@ -42,9 +42,21 @@ Plays on computers, tablets and phones.
 | 3. Lava Lagoon | Five narrow, twisty pools on volcanic islands. Fall in a gap and it's into the lava! |
 | 4. Aurora Fjord | The curviest lake yet, at night under the northern lights. The water is icy and slippery: the bobber slides much farther, so steer early! |
 
-Your lives and score carry from one world to the next. After each portal, the score screen
-counts down and then jumps to hyperspace automatically (or press **Warp now**). You can also
-jump straight to a world from the title screen.
+Every world starts with a **3, 2, 1, GO!** countdown while the camera swoops down from the sky.
+Your lives and score carry from one world to the next. Fly into a portal and you go straight
+into hyperspace, no stopping: you dive in and zoom through a glowing, spinning tunnel while a
+little card shows your stars and points, then you burst out into the next world and GO!
+Press **Scores** on the card to stop and see the full breakdown. You can also jump straight
+to a world from the title screen.
+
+### Stars
+
+Each world has 3 stars to earn: ★ reach the portal, ★ get a 20+ combo, ★ don't lose a life.
+Your best stars for each world are saved and shown on the title screen.
+
+The first time something new comes up (steering, combos, catching fish, the cooler, ring
+gates, gaps to fly over, zapping, the portal), a little tip card explains it. Each tip only
+ever shows once.
 
 ### Obstacles
 
@@ -115,7 +127,7 @@ Audio API.
 | `src/world.js` | The scenery for each world: lakes, waves, islands, dock, trees, stars, portal |
 | `src/bobber.js` | The player: model, mouse/finger/keyboard steering, flying, bobbing |
 | `src/shooting.js` | The zapper: firing zaps and what they hit |
-| `src/hyperspace.js` | The star-streak hyperspace effect between worlds |
+| `src/hyperspace.js` | The hyperspace effect between worlds: star streaks and the spinning tunnel |
 | `src/blackhole.js` | The black hole under Space Lakes and the spiral fall into it |
 | `src/device.js` | Detects phones/tablets (for touch buttons and lighter graphics) |
 | `src/course.js` | Ring gates, the finish portal, and where you respawn |
@@ -128,8 +140,9 @@ Audio API.
 | `src/obstacles.js` | Every obstacle type and how it moves |
 | `src/coins.js` | Coin trails, Golden Lures and Zap Packs |
 | `src/game.js` | Lives, score, timer, game states, runs through the worlds, collisions |
-| `src/ui.js` | HUD and menus (HTML/CSS on top of the 3D view) |
-| `src/settings.js` | Saving settings and best scores |
+| `src/ui.js` | HUD panels, menus, countdown, tips and the warp score card (HTML on top of the 3D view) |
+| `src/style.css` | How the HUD and menus look: one set of colors, outlines and fonts used everywhere |
+| `src/settings.js` | Saving settings, best scores, stars and which tips you've seen |
 | `src/audio.js` | Generated sound effects and each world's background sounds |
 | `src/effects.js` | Splashes, sparkles, confetti and the wake trail |
 | `src/wildlife.js` | Frogs and birds on the shore |

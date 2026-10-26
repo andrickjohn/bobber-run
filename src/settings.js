@@ -11,6 +11,8 @@ import { BOBBER, OBSTACLES, COINS, COMBO, GAME, SCORING, DIFFICULTY, SETTINGS_LI
 
 const SETTINGS_KEY = 'bobberRun.settings';
 const BEST_KEY = 'bobberRun.bestScores';
+const STARS_KEY = 'bobberRun.stars';
+const TIPS_KEY = 'bobberRun.tipsSeen';
 
 // The settings a brand-new player starts with (taken from config.js).
 function defaultSettings() {
@@ -77,6 +79,46 @@ export function recordScore(difficulty, score) {
     // Storage blocked: still counts as a new best for this game.
   }
   return true;
+}
+
+// The most stars earned in each world, e.g. [3, 1, 0, 0] (index = level number).
+export function loadStars() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STARS_KEY) || '[]');
+    return Array.isArray(saved) ? saved.map((n) => (Number.isFinite(n) ? n : 0)) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+// Saves the stars for a world if they beat the old record.
+export function recordStars(levelIndex, stars) {
+  const all = loadStars();
+  if (stars <= (all[levelIndex] || 0)) return;
+  all[levelIndex] = stars;
+  try {
+    localStorage.setItem(STARS_KEY, JSON.stringify(all));
+  } catch (e) {
+    // Storage blocked: just won't be remembered.
+  }
+}
+
+// Which first-time tips have already been shown (so each one only shows once).
+export function loadTipsSeen() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TIPS_KEY) || '[]');
+    return new Set(Array.isArray(saved) ? saved : []);
+  } catch (e) {
+    return new Set();
+  }
+}
+
+export function saveTipsSeen(seen) {
+  try {
+    localStorage.setItem(TIPS_KEY, JSON.stringify([...seen]));
+  } catch (e) {
+    // Storage blocked: tips may show again next visit. That's fine.
+  }
 }
 
 // Copies the chosen difficulty and obstacle count into the config values the game reads.
