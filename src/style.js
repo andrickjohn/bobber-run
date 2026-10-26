@@ -21,7 +21,9 @@ const outlineMaterial = new THREE.MeshBasicMaterial({ color: STYLE.outlineColor,
 const toonCache = new WeakMap(); // so meshes that shared a material still share the toon version
 
 // Swaps every regular material inside "object" for a cartoon (toon) one with the same colors.
+// (Only if STYLE.toon is on; otherwise things keep their smooth, modern shading.)
 export function toonify(object) {
+  if (!STYLE.toon) return object;
   object.traverse((o) => {
     if (!o.isMesh || o.userData.isOutline) return;
     const old = o.material;
@@ -48,6 +50,7 @@ export function toonify(object) {
 // Makes a cartoon (toon) material directly, for things that change their material later
 // (like rings that fade away).
 export function toonMaterial(params) {
+  if (!STYLE.toon) return new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.2, ...params });
   return new THREE.MeshToonMaterial({ ...params, gradientMap: gradient });
 }
 

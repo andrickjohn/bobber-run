@@ -1,13 +1,13 @@
 // course.js
 // The course for each level: the optional ring gates along the way, and the finish portal.
 //
-// Ring gates are glowing hoops facing down the course. Some sit on the water, some float
-// up in the sky (you have to fly through those). Going through one gives points, a combo
+// Ring gates are glowing hoops facing down the course, sitting on the water. Going
+// through one gives points, a combo
 // boost and a free zap. Missing one is fine: there's always another ring ahead.
 // Flying into the portal at the end finishes the level.
 
 import * as THREE from 'three';
-import { RINGS, PORTAL, FLY, BOBBER, COLORS } from './config.js';
+import { RINGS, PORTAL, BOBBER, COLORS } from './config.js';
 import { getWaveHeight, lakeCenterX, getLakeEdges, getLevel, getLakeAt } from './world.js';
 import { toonMaterial, outline } from './style.js';
 
@@ -36,11 +36,10 @@ export function createCourse(scene) {
     for (const z of spots) {
       const edges = getLakeEdges(z);
       const x = THREE.MathUtils.randFloat(edges.minX + 8, edges.maxX - 8);
-      const inAir = Math.random() < RINGS.airChance;
-      // A water ring's bottom just touches the water, so a floating bobber goes through
-      // its lower half. A sky ring is centered at flying height.
-      const height = inAir ? FLY.hoverHeight + 0.5 : RINGS.radius - 0.4;
-      const color = inAir ? COLORS.ringSky : COLORS.ringWater;
+      // The ring's bottom just touches the water, so a floating bobber goes through
+      // its lower half.
+      const height = RINGS.radius - 0.4;
+      const color = COLORS.ringWater;
       const material = toonMaterial({ color, emissive: color, emissiveIntensity: 0.45, transparent: true });
       const group = new THREE.Group();
       group.add(outline(new THREE.Mesh(ringGeo, material), 0.06));
@@ -53,7 +52,7 @@ export function createCourse(scene) {
       }
       group.position.set(x, height, z);
       scene.add(group);
-      rings.push({ group, material, sparkles, x, z, height, inAir, passed: false, fade: 0 });
+      rings.push({ group, material, sparkles, x, z, height, passed: false, fade: 0 });
     }
   }
 
@@ -65,7 +64,7 @@ export function createCourse(scene) {
     const passedNow = [];
     for (const r of rings) {
       // Water rings ride the waves; every ring gently pulses and its sparkles circle around.
-      const baseY = r.inAir ? r.height : r.height + getWaveHeight(r.x, r.z, time);
+      const baseY = r.height + getWaveHeight(r.x, r.z, time);
       r.group.position.y = baseY + Math.sin(time * 2 + r.z) * 0.15;
       r.sparkles.forEach((s, i) => {
         const a = time * 1.5 + (i / r.sparkles.length) * Math.PI * 2;
@@ -86,7 +85,7 @@ export function createCourse(scene) {
         r.passed = true;
         r.material.emissiveIntensity = 1.5;
         r.group.traverse((o) => o.userData.isOutline && (o.visible = false)); // fade cleanly
-        passedNow.push({ x: r.x, y: r.group.position.y, z: r.z, inAir: r.inAir });
+        passedNow.push({ x: r.x, y: r.group.position.y, z: r.z });
       }
     }
     return passedNow;
@@ -115,7 +114,7 @@ export function createCourse(scene) {
 
   // Ring spots (so obstacles can stay away from them) and how many there are.
   function getRingSpots() {
-    return rings.map((r) => ({ x: r.x, z: r.z, inAir: r.inAir }));
+    return rings.map((r) => ({ x: r.x, z: r.z }));
   }
 
   // For the progress bar: how far along each ring is (0 = start, 1 = portal), and

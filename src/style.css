@@ -117,16 +117,11 @@ body.warping .hud-layer { visibility: hidden; }
 .progress-tick { position: absolute; top: -4px; width: 6px; height: 12px; margin-left: -3px; border-radius: 3px; background: var(--gold); border: 1.5px solid var(--ink); }
 .progress-tick.passed { background: var(--green); }
 
-/* Right: lives, energy, zaps, cooler */
+/* Right: lives, zaps, cooler */
 .hud-right { top: 60px; right: 12px; padding: 9px 10px 10px; display: flex; flex-direction: column; align-items: center; gap: 7px; }
 .lives { display: flex; gap: 5px; }
 .life { width: 20px; height: 20px; border-radius: 50%; background: linear-gradient(#e53935 50%, #fff 50%); border: 2px solid var(--ink); box-sizing: border-box; }
 .life.lost { opacity: 0.25; filter: grayscale(1); }
-.energy { display: flex; align-items: center; gap: 5px; }
-.energy span { font-size: 14px; }
-.energy-track { width: 78px; height: 9px; border-radius: 5px; background: rgba(255, 255, 255, 0.25); border: 2px solid var(--ink); overflow: hidden; }
-.energy-fill { height: 100%; width: 100%; background: #ffd54f; transition: background 0.2s; }
-.energy-fill.low { background: var(--red); }
 .ammo { display: flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: 3px; max-width: 104px; }
 .ammo-label { font-size: 13px; margin-right: 2px; }
 .zap-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--aqua); box-shadow: 0 0 6px #00b8d4; border: 1.5px solid var(--ink); box-sizing: border-box; }
@@ -356,7 +351,7 @@ body.title-mode .combo-glow, body.warping .combo-glow { display: none; }
 .best b { font-size: 18px; }
 
 /* ===================================================================
-   Touchscreens: FLY and ZAP buttons (bottom-right, thumb-sized)
+   Touchscreens: JUMP and ZAP buttons (bottom-right, thumb-sized)
    =================================================================== */
 .touch-controls { display: none; }
 body.touch .touch-controls {
@@ -371,7 +366,7 @@ body.title-mode .touch-controls, body.warping .touch-controls { display: none; }
   box-shadow: 0 5px 0 var(--ink); touch-action: none;
 }
 .touch-btn span { font-size: 13px; font-weight: 900; letter-spacing: 1px; }
-.fly-btn { background: var(--orange); width: 96px; height: 96px; }
+.jump-btn { background: var(--orange); width: 96px; height: 96px; }
 .zap-btn { background: var(--teal); }
 .touch-btn.down { transform: translateY(4px) scale(0.95); box-shadow: 0 1px 0 var(--ink); }
 
@@ -393,7 +388,6 @@ body.title-mode .touch-controls, body.warping .touch-controls { display: none; }
   .hud-button .label { display: none; }
   .hud-right { top: 52px; right: 8px; padding: 6px 7px 7px; gap: 5px; }
   .life { width: 15px; height: 15px; }
-  .energy-track { width: 56px; }
   .zap-dot { width: 8px; height: 8px; }
   .ammo { max-width: 80px; }
   #cooler-canvas { width: 76px; height: 128px; }
@@ -444,7 +438,7 @@ body.title-mode .touch-controls, body.warping .touch-controls { display: none; }
   .hud-right { top: 46px; padding: 5px 6px 6px; gap: 4px; }
   #cooler-canvas { width: 70px; height: 112px; }
   .touch-btn { width: 70px; height: 70px; font-size: 22px; }
-  .fly-btn { width: 80px; height: 80px; }
+  .jump-btn { width: 80px; height: 80px; }
   body.touch .touch-controls { bottom: calc(12px + env(safe-area-inset-bottom)); }
   .toast { top: 60px; }
   .countdown { font-size: 80px; }

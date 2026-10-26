@@ -1,7 +1,7 @@
 // ui.js
 // Everything drawn on top of the 3D view with HTML and CSS:
 //   - the HUD (heads-up display): three panels (score + combo, world + timer + progress,
-//     lives + energy + zaps + cooler)
+//     lives + zaps + cooler)
 //   - the menus: title screen, settings, pause, game over and victory
 //   - little pop-up notes ("toasts")
 //
@@ -26,7 +26,7 @@ export function createUI() {
   // ----- The in-game HUD: three tidy panels in one layer -----
   //   left:   the game's name, your score and the combo meter
   //   top:    world name, timer and the progress bar to the portal
-  //   right:  lives, flying energy, zaps and the cooler
+  //   right:  lives, zaps and the cooler
   const hudLayer = document.createElement('div');
   hudLayer.className = 'hud-layer';
   hudLayer.innerHTML = `
@@ -52,7 +52,6 @@ export function createUI() {
     </div>
     <div class="panel hud-right">
       <div class="lives" id="lives"></div>
-      <div class="energy"><span>⚡</span><div class="energy-track"><div class="energy-fill" id="energy-fill"></div></div></div>
       <div class="ammo" id="ammo"></div>
       <div class="cooler"><div class="cooler-label">🧊 Cooler</div><canvas id="cooler-canvas"></canvas></div>
     </div>
@@ -147,7 +146,7 @@ export function createUI() {
     muteButton.blur();
   });
 
-  // ----- Touchscreen buttons: FLY (hold) and ZAP (hold to keep firing) -----
+  // ----- Touchscreen buttons: JUMP (tap) and ZAP (hold to keep firing) -----
   // They only show on touch devices (the "touch" class on the page turns them on).
   if (isTouchDevice) document.body.classList.add('touch');
   // A laptop with a touchscreen: show them the first time someone touches the screen.
@@ -158,7 +157,7 @@ export function createUI() {
   touchControls.className = 'touch-controls';
   touchControls.innerHTML = `
     <button class="touch-btn zap-btn" aria-label="Zap">⚡<span>ZAP</span></button>
-    <button class="touch-btn fly-btn" aria-label="Fly">🪽<span>FLY</span></button>`;
+    <button class="touch-btn jump-btn" aria-label="Jump">⤴<span>JUMP</span></button>`;
   document.body.appendChild(touchControls);
   // Each button announces when it's pressed and let go. "Pointer capture" keeps
   // listening to that finger even if it slides off the button a little.
@@ -181,7 +180,7 @@ export function createUI() {
     button.addEventListener('pointercancel', release);
     button.addEventListener('lostpointercapture', release);
   }
-  holdButton(touchControls.querySelector('.fly-btn'), 'fly');
+  holdButton(touchControls.querySelector('.jump-btn'), 'jump');
   holdButton(touchControls.querySelector('.zap-btn'), 'zap');
   // No long-press menus on the game.
   document.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -256,9 +255,9 @@ export function createUI() {
         <div class="title-side">
           <p class="howto">${
             touch
-              ? 'Drag left/right to steer · hold <b>FLY</b> · tap <b>ZAP</b>'
-              : 'Point left/right to steer · <b>Space</b> to fly · <b>F</b> to zap · <b>↑</b> boost'
-          }<br>Line up with coin trails and zoom through them all, catch fish, fly into the portal!</p>
+              ? 'Drag left/right to steer · tap <b>JUMP</b> · tap <b>ZAP</b>'
+              : 'Point left/right to steer · <b>Space</b> to jump · <b>F</b> to zap · <b>↑</b> boost'
+          }<br>Line up with coin trails and scoop them all up, catch fish, ride into the portal!</p>
           ${touch && window.innerHeight > window.innerWidth ? '<p class="note">📱 Turn your phone sideways for a bigger view</p>' : ''}
           <div class="level-picker"><span>Or jump to a world:</span><div class="choices">${levelButtons}</div></div>
           <div class="title-footer">
@@ -450,12 +449,6 @@ export function createUI() {
         ${row('Difficulty multiplier', '×' + b.multiplier)}
         ${row('Total', b.total, 'total')}
       </table>`;
-    },
-    // fraction: 1 = full energy, 0 = empty. "low" makes it red (not enough to take off).
-    setEnergy(fraction, low) {
-      const fill = document.getElementById('energy-fill');
-      fill.style.width = Math.round(fraction * 100) + '%';
-      fill.classList.toggle('low', low);
     },
     setAmmo(left, max) {
       if (left === shownAmmo && max === ammo.childElementCount - 1) return; // only redraw when it changes

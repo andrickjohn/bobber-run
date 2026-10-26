@@ -3,15 +3,15 @@
 // It cruises forward down the course by itself, like in a runner game. You steer only
 // LEFT and RIGHT: it slides over to line up with wherever the mouse (or your finger)
 // points. The arrow keys (or A/D) steer too; Up/W is a speed boost and Down/S brakes.
-// Holding Space (or the mouse button) makes it FLY: it climbs up to the "sky lane" and
-// stays there until you let go or run out of energy, then drops back down to the water.
-// So there are just two heights, water and sky, which makes coin trails easy to line up.
-// Over a gap between space lakes there's no water to land on: it falls into space!
+// Space (or the mouse button) makes it JUMP: a quick hop over a log or a fish, then
+// straight back down to scoop up more coins.
+// At the end of a lake with another lake ahead (space, lava), it takes a big LEAP across
+// the gap by itself.
 
 import * as THREE from 'three';
-import { BOBBER, FLY, SHOOT, COLORS, RUNNER } from './config.js';
+import { BOBBER, JUMP, LEAP, SHOOT, COLORS, RUNNER } from './config.js';
 import { cartoon } from './style.js';
-import { getWaveHeight, getLakeEdges, getWaterBounds, isOverLake, getLakeAt, getLevel } from './world.js';
+import { getWaveHeight, getLakeEdges, getWaterBounds, isOverLake, getLakeAt, getLevel, getLeapAfter } from './world.js';
 
 export function createBobber(scene, camera, canvas) {
   // ----- The 3D model -----
@@ -55,7 +55,7 @@ export function createBobber(scene, camera, canvas) {
   marker.visible = false;
   scene.add(marker);
 
-  // A soft dark spot on the water under the bobber while it flies,
+  // A soft dark spot on the water under the bobber while it's in the air,
   // so you can tell how high it is and where it will land.
   const blob = new THREE.Mesh(
     new THREE.CircleGeometry(r * 1.1, 20),
@@ -68,11 +68,11 @@ export function createBobber(scene, camera, canvas) {
   // ----- Movement state -----
   const position = new THREE.Vector3(0, 0, BOBBER.startZ); // only X and Z matter for steering
   const velocity = new THREE.Vector3();
-  // Flying: height above the water, up/down speed, and energy (1 = full, 0 = empty).
-  // mustLetGo: after running out of energy, you have to let go of Fly before flying again
-  // (otherwise holding the button would make it hop up and down as energy trickles back).
+  // In the air: height above the water and up/down speed.
+  // leaping: in the middle of a big leap across a gap (it keeps its speed until it lands).
   // falling: dropped below the lakes into a gap (no way back up, you lose a life).
-  const flight = { height: 0, vy: 0, energy: 1, flying: false, mustLetGo: false, falling: false };
+  const flight = { height: 0, vy: 0, leaping: false, falling: false };
+  let jumpBuffer = 0; // > 0 for a moment after pressing jump, so a slightly early press still works
   // Squash and stretch: a springy height (1 = normal, more = tall and thin, less = squashed).
   const squash = { y: 1, speed: 0 };
   let speedSetting = BOBBER.speedSetting;
@@ -117,22 +117,19 @@ export function createBobber(scene, camera, canvas) {
   document.addEventListener('mouseleave', () => (hasMouse = false));
   window.addEventListener('blur', () => (hasMouse = false));
 
-  // ----- Fly button -----
-  // Fly while Space is held, or while the left mouse button is held down on the game.
-  let flyKeyDown = false;
-  let flyMouseDown = false;
-  let flyButtonDown = false; // the on-screen Fly button (for touchscreens)
+  // ----- Jump -----
+  // Space, a left click on the game, or the on-screen Jump button.
+  function pressJump() {
+    if (controlsEnabled) jumpBuffer = JUMP.buffer;
+  }
   canvas.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse') {
-      if (e.button === 0) flyMouseDown = true;
+      if (e.button === 0) pressJump();
     } else if (steeringFinger === null) {
       // The first finger to touch the game becomes the steering finger.
       steeringFinger = e.pointerId;
       pointAt(e);
     }
-  });
-  window.addEventListener('pointerup', (e) => {
-    if (e.pointerType === 'mouse' && e.button === 0) flyMouseDown = false;
   });
 
   // ----- Keyboard -----
@@ -146,7 +143,7 @@ export function createBobber(scene, camera, canvas) {
   const held = { forward: false, back: false, left: false, right: false };
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {
-      flyKeyDown = true;
+      if (!e.repeat) pressJump(); // (holding Space down doesn't keep jumping)
       e.preventDefault(); // stop Space from scrolling the page or "clicking" a button
       return;
     }
@@ -163,11 +160,8 @@ export function createBobber(scene, camera, canvas) {
   });
   function releaseAllKeys() {
     for (const k in held) held[k] = false;
-    flyKeyDown = false;
-    flyMouseDown = false;
   }
   window.addEventListener('keyup', (e) => {
-    if (e.code === 'Space') flyKeyDown = false;
     const dir = KEY_DIRECTIONS[e.code];
     if (dir) held[dir] = false;
     // On a Mac, keys let go while ⌘ is held never send "keyup", so let go of everything.
@@ -209,59 +203,63 @@ export function createBobber(scene, camera, canvas) {
     return 0.4 + 0.12 * speedSetting;
   }
 
-  // ----- Flying -----
+  // ----- Jumping and leaping -----
   // Returns the landing speed on the frame the bobber touches down (for a splash), else 0.
   function updateFlight(dt) {
+    jumpBuffer = Math.max(0, jumpBuffer - dt);
     if (flight.falling) {
       // Tumbling down into space: gravity only, faster and faster.
-      flight.flying = false;
-      flight.vy -= FLY.gravity * 2 * dt;
+      flight.vy -= JUMP.gravity * dt;
       flight.height += flight.vy * dt;
       return 0;
     }
-    const wantsToFly = controlsEnabled && (flyKeyDown || flyMouseDown || flyButtonDown);
-    if (!wantsToFly) flight.mustLetGo = false;
-    if (flight.energy <= 0) flight.mustLetGo = true;
-    // Take off only with enough energy; once flying, keep going until it runs out.
-    const canFly = flight.flying ? flight.energy > 0 : flight.energy >= FLY.minEnergyToFly && !flight.mustLetGo;
-    if (wantsToFly && canFly) {
-      flight.flying = true;
-      // Steer the up/down speed toward "the speed that gets us to hover height".
-      // Far below → climb at full speed. At hover height → speed 0, so it hovers.
-      const wantedVy = THREE.MathUtils.clamp((FLY.hoverHeight - flight.height) * 5, -FLY.climbSpeed, FLY.climbSpeed);
-      flight.vy += (wantedVy - flight.vy) * Math.min(1, 10 * dt);
-      flight.energy = Math.max(0, flight.energy - FLY.energyDrain * dt);
-    } else {
-      flight.flying = false;
-      flight.vy -= FLY.gravity * dt; // let go (or out of energy): glide back down
+    // Jump! Only from the water (no jumping again in mid-air).
+    if (jumpBuffer > 0 && flight.height === 0 && controlsEnabled) {
+      jumpBuffer = 0;
+      flight.vy = JUMP.speed;
+      flight.height = 0.001;
+      jumped = true;
     }
+    if (flight.height === 0) return 0;
 
+    // In the air: gravity pulls the up/down speed down every frame.
+    flight.vy -= JUMP.gravity * dt;
     flight.height += flight.vy * dt;
-    let landingSpeed = 0;
-    const overLake = isOverLake(position.z);
-    if (flight.height <= 0) {
-      if (!overLake) {
-        // No water down here, just empty space...
-        flight.falling = true;
-        return 0;
-      }
-      if (flight.vy < 0 && flight.height < 0) landingSpeed = -flight.vy;
-      flight.height = 0;
-      flight.vy = 0;
+    if (flight.height > 0) return 0;
+    if (!isOverLake(position.z)) {
+      flight.falling = true; // no water down here, just empty space...
+      return 0;
     }
-    // Recharge while floating on the water.
-    if (flight.height === 0 && !flight.flying && overLake) {
-      flight.energy = Math.min(1, flight.energy + FLY.energyRecharge * dt);
-    }
+    // Splash down.
+    const landingSpeed = -flight.vy;
+    flight.height = 0;
+    flight.vy = 0;
+    flight.leaping = false;
     return landingSpeed;
+  }
+
+  // At the end of a lake with another lake ahead: launch across the gap!
+  // The arc is a parabola. Going up at speed v against gravity g, it rises to v² ÷ 2g,
+  // so to reach LEAP.height we need v = √(2 × g × height). It's in the air for 2v ÷ g
+  // seconds, and the forward speed is chosen to cover the gap in exactly that time.
+  function startLeap(leap) {
+    const up = Math.sqrt(2 * JUMP.gravity * LEAP.height);
+    const airTime = (2 * up) / JUMP.gravity;
+    flight.vy = up;
+    flight.height = 0.001;
+    flight.leaping = true;
+    velocity.z = -(position.z - leap.toZ) / airTime;
   }
 
   // ----- Called every frame -----
   // dt = seconds since the last frame, time = seconds since the game started.
   // Returns { landed: speed } on the frame it splashes down from a flight,
   // { fell: true } once it has fallen far down into space, otherwise null.
+  let jumped = false; // set for one frame when a jump starts
   function update(dt, time) {
+    jumped = false;
     const landingSpeed = updateFlight(dt);
+    let leaped = false;
     const factor = speedFactor();
 
     marker.visible = false;
@@ -269,7 +267,9 @@ export function createBobber(scene, camera, canvas) {
     // ----- Forward: cruise down the course by itself -----
     // The camera looks toward −Z (the finish), so forward is −Z.
     let wantedSpeed = 0;
-    if (controlsEnabled) {
+    if (flight.leaping) {
+      wantedSpeed = -velocity.z; // mid-leap: keep the launch speed
+    } else if (controlsEnabled) {
       wantedSpeed = RUNNER.cruiseSpeed * factor * (1 + rush);
       if (held.forward) wantedSpeed *= RUNNER.boost;
       if (held.back) wantedSpeed *= RUNNER.brake;
@@ -308,6 +308,16 @@ export function createBobber(scene, camera, canvas) {
 
     keepInsideLake();
 
+    // Reached the end of this lake on the water, with another lake ahead? LEAP!
+    const lake = getLakeAt(position.z);
+    if (lake && controlsEnabled && flight.height === 0 && position.z <= lake.end + r + 0.05) {
+      const leap = getLeapAfter(lake);
+      if (leap) {
+        startLeap(leap);
+        leaped = true;
+      }
+    }
+
     // Float on the waves and bob a little on top of that. The waves matter less the
     // higher it flies ("onWater" goes from 1 on the water down to 0 at 2 units up).
     const wave = getWaveHeight(position.x, position.z, time);
@@ -339,7 +349,9 @@ export function createBobber(scene, camera, canvas) {
     blob.material.opacity = Math.max(0.08, 0.35 - flight.height * 0.03);
 
     if (flight.falling && flight.height < -12) return { fell: true };
-    return landingSpeed > FLY.landSplashSpeed ? { landed: landingSpeed } : null;
+    if (leaped) return { leaped: true };
+    if (jumped) return { jumped: true };
+    return landingSpeed > JUMP.landSplashSpeed ? { landed: landingSpeed } : null;
   }
 
   // If the bobber goes past the shore, put it back on the edge and
@@ -358,8 +370,8 @@ export function createBobber(scene, camera, canvas) {
 
     let minZ = getWaterBounds().minZ + r;
     let maxZ = BOBBER.startZ + 2; // can't go back under the dock
-    // Floating on the water, the ends of the lake are shore too: to cross a gap to the
-    // next lake you have to FLY.
+    // Floating on the water, the ends of the lake are shore too (the bobber leaps across
+    // a gap from there, see update()).
     const lake = getLakeAt(position.z);
     if (lake && flight.height === 0 && !flight.falling) {
       minZ = Math.max(minZ, lake.end + r);
@@ -375,16 +387,15 @@ export function createBobber(scene, camera, canvas) {
     }
   }
 
-  // Put the bobber at a spot on the water, stopped, with full energy.
+  // Put the bobber at a spot on the water, stopped.
   function reset(x, z) {
     position.set(x, 0, z);
     velocity.set(0, 0, 0);
     flight.height = 0;
     flight.vy = 0;
-    flight.energy = 1;
-    flight.flying = false;
-    flight.mustLetGo = false;
+    flight.leaping = false;
     flight.falling = false;
+    jumpBuffer = 0;
     mesh.scale.setScalar(1); // (a black hole may have shrunk it)
     squash.y = 1;
     squash.speed = 0;
@@ -395,7 +406,7 @@ export function createBobber(scene, camera, canvas) {
   // Which way to shoot (a direction of length 1, written into "out").
   // With the mouse: toward the spot on the water you're pointing at.
   // Without it (or if that spot is very close): at the water a little ahead of
-  // the way you're moving. When flying, this aims downward at the water, so zaps
+  // the way you're moving. In the air, this aims downward at the water, so zaps
   // can still hit fish and logs below you.
   function getAim(out) {
     let tx = target.x;
@@ -425,9 +436,9 @@ export function createBobber(scene, camera, canvas) {
     squash.speed += 6 * amount;
   }
 
-  // The on-screen Fly button (touchscreens) calls this.
-  function setFlyButton(down) {
-    flyButtonDown = down;
+  // The on-screen Jump button (touchscreens) calls this.
+  function setJumpButton(down) {
+    if (down) pressJump();
   }
 
   function setSpeedSetting(value) {
@@ -446,7 +457,7 @@ export function createBobber(scene, camera, canvas) {
 
   return {
     mesh, position, velocity, flight, radius: r,
-    update, reset, setSpeedSetting, setControlsEnabled, setVisible, setFlyButton, getAim, boing, addRush,
+    update, reset, setSpeedSetting, setControlsEnabled, setVisible, setJumpButton, getAim, boing, addRush,
     get rush() { return rush; },
     // Height above the water and whether it's floating (handy for other files).
     get height() { return flight.height; },

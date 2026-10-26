@@ -2,14 +2,14 @@
 
 *A fishing-themed 3D ball game by Eliott, built with [Claude Code](https://claude.com/claude-code) for a 10th grade tech project.*
 
-Steer a fishing bobber across a lake, swoop through trails of coins to build huge combos,
-fly through glowing ring gates, dodge (or zap!) fishing-themed obstacles, and fly into the
+Steer a fishing bobber down a lake, scoop up trails of coins to build huge combos, float
+through glowing ring gates, jump over (or zap!) fishing-themed obstacles, and ride into the
 swirling portal at the end (it bursts open when you've gone far enough). Catch colorful fish
 and stack them in your cooler: three of a color pop! The portal shows your
 score, then blasts you through hyperspace to the next world: **Space Lakes**, where lakes
 float on islands among the stars above a swirling black hole, then **Lava Lagoon**, where cool
 pools sit on volcanic rock above a sea of lava, and finally **Aurora Fjord**, a snowy, slippery
-lake under the northern lights. In the island worlds you have to fly from one lake to the next.
+lake under the northern lights. In the island worlds the bobber leaps from one lake to the next.
 
 Plays on computers, tablets and phones.
 
@@ -20,32 +20,32 @@ Plays on computers, tablets and phones.
 | **Mouse** (point left or right) | **Drag your finger** | The bobber cruises forward by itself; it slides over to line up with where you point |
 | **← → / A D** | | Steer left and right with the keyboard instead |
 | **↑ / W** and **↓ / S** | | Speed boost and brake |
-| Hold **Space** or the **left mouse button** | Hold **FLY** | Fly up to the sky lane, drop back down when you let go |
+| **Space** or **left-click** | Tap **JUMP** | A quick hop over a log or a fish |
 | **F** or **right-click** | Tap **ZAP** | Fire a zap at what you're aiming at |
 | **P** or **Esc** | ⏸ button | Pause |
 | **R** | ↻ button | Restart the level |
 | **M** | Sound button | Sound on/off |
 
-- **It's like a runner game:** the bobber always cruises forward, and there are just two heights, the water and the **sky lane**. That makes everything easy to line up.
-- **Coins come in trails** that run straight down the course: straight lines, smooth lane changes, gentle curves, and hops up into the sky lane. Some line up right through a ring gate, and over the gaps between lakes they float in the sky lane to show you the way across. Coins close to you fly to you by themselves, so if you're lined up you'll get them. Grab **every coin in a trail** for a **PERFECT TRAIL** bonus! Each coin also gives you a little burst of speed. Every coin in a row builds your 🔥 **combo**: every 5 in a row raises the multiplier (×2, ×3 … ×10), and each coin's "ding" is a little higher than the last. Wait too long between coins, or get hit, and the combo breaks.
+- **It's like a runner game:** the bobber always cruises forward on the water. You steer left and right, and jump over things in your way.
+- **Coins come in trails** that run straight down the course: straight lines, smooth lane changes, and gentle curves. Some line up right through a ring gate, and over the gaps between lakes they follow the arc of your big leap. Coins close to you fly to you by themselves, so if you're lined up you'll get them. Grab **every coin in a trail** for a **PERFECT TRAIL** bonus! Each coin also gives you a little burst of speed. Every coin in a row builds your 🔥 **combo**: every 5 in a row raises the multiplier (×2, ×3 … ×10), and each coin's "ding" is a little higher than the last. Wait too long between coins, or get hit, and the combo breaks.
 - **Catch & stack:** colorful little fish swim in schools; bump into them (or zap them, or zap a bass or pike) to **catch** them. Caught fish drop into the **cooler** on the side of the screen. **Three of a color in a row** (up/down or across) **pop** for big points, and fish falling into the gaps can set off **chains**. Fill the cooler with nothing to pop and it overflows: you lose your combo!
-- **Ring gates** are optional glowing hoops: gold ones on the water, purple ones up in the sky. Go through one for points (times your combo), a combo boost and a free zap.
+- **Ring gates** are optional glowing gold hoops on the water. Go through one for points (times your combo), a combo boost and a free zap.
 - Getting hit by a fish, turtle, lure or log costs a life and your combo. You come back a little behind where it happened and blink for a moment (safe).
-- **Flying** uses energy (the ⚡ bar), which recharges while you float on the water. Coins grabbed while flying give some energy back, so following a sky trail keeps you up longer. The open portal pulls you toward its middle, so you can't miss it. Fly over obstacles, grab coins floating in the sky, and cross the gaps between space lakes. Fall into a gap and you lose a life!
+- **Jump** to hop over logs and fish, then you're straight back down scooping coins. In worlds with gaps between the lakes (Space Lakes, Lava Lagoon), the bobber takes a **BIG LEAP** across by itself when it reaches the end of a lake. The open portal pulls you toward its middle, so you can't miss it.
 - **Zaps** (the 🎯 dots) knock obstacles out for points. They reload slowly; grab **⚡ Zap Packs** (+3) and go through ring gates (+1) to earn more.
-- **Lily pads** slow you down and **whirlpools** (Hard only) pull you in, but neither costs a life (and you can fly right over them).
+- **Lily pads** slow you down and **whirlpools** (Hard only) pull you in, but neither costs a life (and you can jump right over them).
 
 ### Worlds
 
 | World | What's special |
 |---|---|
-| 1. Home Lake | A curvy lake with beaches, trees, frogs and birds, starting from a wooden dock |
-| 2. Space Lakes | Four lakes on floating islands among the stars. Fall into a gap and you spiral down into the black hole below, along with satellites, asteroids and little planets! |
-| 3. Lava Lagoon | Five narrow, twisty pools on volcanic islands. Fall in a gap and it's into the lava! |
+| 1. Home Lake | A curvy lake with beaches, pine forests, snowy mountains, frogs and birds, starting from a wooden dock |
+| 2. Space Lakes | Four lakes on floating islands among the stars, above a swirling black hole. Leap from island to island! |
+| 3. Lava Lagoon | Five narrow, twisty pools on volcanic islands above a sea of lava |
 | 4. Aurora Fjord | The curviest lake yet, at night under the northern lights. The water is icy and slippery: the bobber slides much farther, so steer early! |
 
 Every world starts with a **3, 2, 1, GO!** countdown while the camera swoops down from the sky.
-Your lives and score carry from one world to the next. Fly into a portal and you go straight
+Your lives and score carry from one world to the next. Ride into a portal and you go straight
 into hyperspace, no stopping: you dive in and zoom through a glowing, spinning tunnel while a
 little card shows your stars and points, then you burst out into the next world and GO!
 Press **Scores** on the card to stop and see the full breakdown. You can also jump straight
@@ -57,7 +57,7 @@ Each world has 3 stars to earn: ★ reach the portal, ★ get a 20+ combo, ★ d
 Your best stars for each world are saved and shown on the title screen.
 
 The first time something new comes up (steering, combos, catching fish, the cooler, ring
-gates, gaps to fly over, zapping, the portal), a little tip card explains it. Each tip only
+gates, jumping, zapping, the portal), a little tip card explains it. Each tip only
 ever shows once.
 
 ### Obstacles
@@ -126,9 +126,9 @@ Audio API.
 |---|---|
 | `src/config.js` | **Every tunable number and color.** Change things here to tweak the game |
 | `src/main.js` | Starts the game, switches between screens, runs the main loop |
-| `src/scene.js` | Renderer, camera, lights, sky and fog |
-| `src/world.js` | The scenery for each world: lakes, waves, islands, dock, trees, stars, portal |
-| `src/bobber.js` | The player: model, mouse/finger/keyboard steering, flying, bobbing |
+| `src/scene.js` | Renderer, camera, lights, the gradient sky dome, sky reflections and fog |
+| `src/world.js` | The scenery for each world: lakes, waves, islands, mountains, dock, trees, stars, portal |
+| `src/bobber.js` | The player: model, mouse/finger/keyboard steering, jumping, the big leap, bobbing |
 | `src/shooting.js` | The zapper: firing zaps and what they hit |
 | `src/hyperspace.js` | The hyperspace effect between worlds: star streaks and the spinning tunnel |
 | `src/blackhole.js` | The black hole under Space Lakes and the spiral fall into it |
@@ -138,7 +138,7 @@ Audio API.
 | `src/catchfish.js` | The schools of colorful fish you can catch |
 | `src/cooler.js` | The cooler puzzle: stacking, matching, chains and overflow |
 | `src/fishart.js` | Draws the flat 2D fish, bobbers and lures (title toy and cooler) |
-| `src/style.js` | The cartoon look: toon shading and outlines |
+| `src/style.js` | Thin outlines (and optional toon shading, `STYLE.toon`) |
 | `src/tacklebox.js` | The Tackle Box Drop fish-merging toy on the title screen |
 | `src/obstacles.js` | Every obstacle type and how it moves |
 | `src/coins.js` | Coin trails, Golden Lures and Zap Packs |

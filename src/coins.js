@@ -2,8 +2,8 @@
 // Gold coins laid out in TRAILS ahead of the player. Trails run straight down the course
 // in "lanes" (a lane = a spot across the lake, like "a third of the way from the left"),
 // so they follow the lake's curves and you can line up and zoom through a whole trail:
-// straight lines, smooth lane changes, gentle curves, and hops up into the sky lane.
-// Over a gap between lakes, the coins float in the sky lane and show you the way across.
+// straight lines, smooth lane changes and gentle curves.
+// Over a gap between lakes, the coins follow the arc of the big leap across.
 // Some trails line up through a ring gate. Grab EVERY coin in a trail for a bonus!
 // Coins close to you fly to you by themselves (a "magnet"), so lined up = you get them.
 // Some trails end with a Golden Lure, and ⚡ Zap Packs float in the gaps between trails.
@@ -11,7 +11,7 @@
 
 import * as THREE from 'three';
 import { COINS, COLORS } from './config.js';
-import { getWaveHeight, getLakeEdges, getLevel, isOverLake } from './world.js';
+import { getWaveHeight, getLakeEdges, getLevel, getLeapHeight } from './world.js';
 import { cartoon } from './style.js';
 
 const rand = THREE.MathUtils.randFloat;
@@ -87,25 +87,17 @@ function xToLane(x, z) {
 }
 
 // The trail shapes. Each takes t (0 at the start of the trail, 1 at the end) plus the
-// trail's starting lane and a second lane, and returns the lane and height (0 = water,
-// 1 = sky lane) at that point.
+// trail's starting lane and a second lane, and returns the lane at that point.
 const SHAPES = {
   // Straight down one lane
-  line: (t, a) => ({ lane: a, up: 0 }),
+  line: (t, a) => a,
   // A smooth lane change from lane a to lane b
-  shift: (t, a, b) => ({ lane: a + (b - a) * smooth(0.2, 0.8, t), up: 0 }),
+  shift: (t, a, b) => a + (b - a) * smooth(0.2, 0.8, t),
   // A gentle S-curve around lane a
-  curve: (t, a) => ({ lane: a + Math.sin(t * Math.PI * 2) * 0.25, up: 0 }),
-  // Straight along the sky lane (fly!)
-  sky: (t, a) => ({ lane: a, up: 1 }),
-  // A hop: up into the sky lane, along it, and back down. min(1, sin × 1.8) makes the
-  // top flat, like a fly-hop.
-  hop: (t, a) => ({ lane: a, up: Math.min(1, Math.sin(Math.PI * t) * 1.8) }),
-  // Starts on the water, then climbs up into the sky lane
-  climb: (t, a) => ({ lane: a, up: smooth(0.35, 0.55, t) }),
+  curve: (t, a) => a + Math.sin(t * Math.PI * 2) * 0.25,
 };
 // How often each shape is picked (bigger = more often)
-const SHAPE_WEIGHTS = { line: 3, shift: 3, curve: 2, sky: 1.5, hop: 2, climb: 1 };
+const SHAPE_WEIGHTS = { line: 3, shift: 3, curve: 2 };
 
 function pickShape() {
   const total = Object.values(SHAPE_WEIGHTS).reduce((a, b) => a + b, 0);
@@ -152,7 +144,7 @@ export function createCoins(scene) {
     // Is there a ring gate along this stretch? Then often line the trail up through it.
     const ring = ringSpots.find((r) => r.z < startZ - 4 && r.z > endZ + 4);
     if (ring && Math.random() < COINS.ringTrailChance) {
-      shapeName = ring.inAir ? 'sky' : 'line';
+      shapeName = 'line';
       laneA = xToLane(ring.x, ring.z);
     }
     const shape = SHAPES[shapeName];
@@ -161,10 +153,10 @@ export function createCoins(scene) {
     const trail = { total: 0, got: 0, missed: false };
     for (let i = 0; i < n; i++) {
       const z = startZ - i * COINS.spacing;
-      const { lane, up } = shape(i / (n - 1), laneA, laneB);
+      const lane = shape(i / (n - 1), laneA, laneB);
       const x = laneToX(THREE.MathUtils.clamp(lane, -0.8, 0.8), z);
-      // Over a gap between lakes there's no water, so coins float in the sky lane there.
-      const height = isOverLake(z, 2) ? up * COINS.skyHeight : COINS.skyHeight;
+      // Over a gap between lakes, coins float along the arc of the big leap.
+      const height = getLeapHeight(z);
       // Skip coins that would sit inside an obstacle on the water.
       if (height < 2 && !isClear(x, z, 2)) continue;
       addPickup(goldenEnd && i === n - 1 ? 'golden' : 'coin', x, z, height, trail);
@@ -190,7 +182,7 @@ export function createCoins(scene) {
       // Sometimes a Zap Pack floats in the gap before the next trail.
       if (Math.random() < COINS.zapPackChance) {
         const pz = endZ - gap / 2;
-        addPickup('zapPack', laneToX(rand(-0.6, 0.6), pz), pz, isOverLake(pz, 2) ? 0 : COINS.skyHeight);
+        addPickup('zapPack', laneToX(rand(-0.6, 0.6), pz), pz, getLeapHeight(pz));
       }
       nextTrailZ = endZ - gap;
     }

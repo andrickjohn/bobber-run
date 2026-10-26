@@ -12,7 +12,7 @@
 //   getWaterBounds()       – the nearest and farthest water in the level
 
 import * as THREE from 'three';
-import { LAKE, DOCK, SHORE, COURSE, PORTAL, LEVELS, THEMES, COLORS, MOBILE } from './config.js';
+import { LAKE, DOCK, SHORE, COURSE, PORTAL, LEVELS, THEMES, COLORS, MOBILE, LEAP } from './config.js';
 import { isTouchDevice } from './device.js';
 import { createBlackHole } from './blackhole.js';
 
@@ -48,6 +48,27 @@ export function getLakeAt(z) {
 // Is there a lake at this Z? margin = also stay this far from the lake's ends.
 export function isOverLake(z, margin = 0) {
   return level.lakes.some((lake) => z <= lake.start - margin && z >= lake.end + margin);
+}
+
+// The big leap across the gap after a lake: where it takes off and where it lands
+// (a little way into the next lake). null if there's no lake after this one.
+export function getLeapAfter(lake) {
+  const next = level.lakes.find((l) => l.start < lake.end); // lakes are listed near to far
+  if (!next) return null;
+  return { fromZ: lake.end, toZ: next.start - LEAP.landInto };
+}
+
+// How high the leap's arc is at this Z (0 if Z isn't under a leap).
+// The arc is a parabola: 4 × height × u × (1 − u) is 0 at both ends and "height" in the middle.
+export function getLeapHeight(z) {
+  for (const lake of level.lakes) {
+    const leap = getLeapAfter(lake);
+    if (leap && z < leap.fromZ && z > leap.toZ) {
+      const u = (leap.fromZ - z) / (leap.fromZ - leap.toZ);
+      return 4 * LEAP.height * u * (1 - u);
+    }
+  }
+  return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -199,6 +220,7 @@ export function createWorld(scene) {
     root.add(createSpaceStartLine(theme));
   } else {
     root.add(createTerrain(theme));
+    if (theme.mountains) root.add(createMountains(theme));
     root.add(createDock());
     root.add(createTrees(theme));
     if (theme.reeds !== false) root.add(createReeds());
@@ -268,7 +290,7 @@ function createWater(theme, lake) {
   const chopPhase = new Float32Array(pos.count);
   const isLake = new Uint8Array(pos.count);
   for (let i = 0; i < pos.count; i++) {
-    tmp.copy(base).offsetHSL(THREE.MathUtils.randFloatSpread(0.02), 0, THREE.MathUtils.randFloatSpread(0.05));
+    tmp.copy(base).offsetHSL(THREE.MathUtils.randFloatSpread(0.01), 0, THREE.MathUtils.randFloatSpread(0.02));
     colors.push(tmp.r, tmp.g, tmp.b);
     chopAmount[i] = Math.random();
     chopPhase[i] = Math.random() * Math.PI * 2;
@@ -276,11 +298,12 @@ function createWater(theme, lake) {
   }
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
+  // Smooth and glossy: it reflects the sky (see scene.js) and catches the sun.
   const mat = new THREE.MeshStandardMaterial({
     vertexColors: true,
-    roughness: 0.3,
-    metalness: 0.1,
-    flatShading: true, // gives the low-poly faceted look
+    roughness: 0.12,
+    metalness: 0.05,
+    envMapIntensity: 1.6,
     transparent: true,
     opacity: LAKE.waterOpacity,
     // Space water glows a little, like it's magic.
@@ -301,6 +324,9 @@ function createWater(theme, lake) {
       pos.setY(i, waveFormula(x, z, time) + chop);
     }
     pos.needsUpdate = true;
+    // Work out which way each bit of water now faces ("normals"), so the light and the
+    // sky reflection ripple across the waves.
+    geo.computeVertexNormals();
   }
 
   return { mesh, update };
@@ -345,16 +371,76 @@ function createLandSheet(theme, minX, maxX, minZ, maxZ, onlyLake) {
     else if (d < SHORE.sandWidth + edgeNoise) c.copy(sand);
     else if (y < 0.3) c.copy(rock); // island cliff edge
     else c.copy(grass).lerp(grassDark, THREE.MathUtils.clamp(y / SHORE.hillHeight, 0, 1));
-    c.offsetHSL(0, 0, THREE.MathUtils.randFloatSpread(0.04));
+    // Big soft patches of lighter and darker ground (two slow sine waves crossing),
+    // plus a tiny bit of speckle, so the land doesn't look like one flat color.
+    const patches = Math.sin(x * 0.06 + Math.cos(z * 0.05) * 2) * Math.sin(z * 0.07 + x * 0.02);
+    c.offsetHSL(patches * 0.015, 0, patches * 0.05 + THREE.MathUtils.randFloatSpread(0.015));
     colors.push(c.r, c.g, c.b);
   }
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geo.computeVertexNormals();
 
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true });
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }); // smooth, rolling land
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   return mesh;
+}
+
+// ---------------------------------------------------------------------------
+// Distant mountains: big ridges far away on both sides and beyond the finish.
+// The fog makes them hazy and bluish, which makes the world look deep and big.
+// ---------------------------------------------------------------------------
+// The height of a ridge at a point: several sine waves of different lengths added up
+// make an irregular row of peaks (the same idea as the lake's curvy shoreline).
+function ridgeHeight(along, seed) {
+  const peaks =
+    0.5 + 0.25 * Math.sin(along * 0.011 + seed) + 0.15 * Math.sin(along * 0.027 + seed * 2.3) +
+    0.1 * Math.sin(along * 0.061 + seed * 4.1);
+  return SHORE.mountainHeight * Math.max(0.15, peaks);
+}
+
+function createMountainRange(theme, length, depth, seed) {
+  const geo = new THREE.PlaneGeometry(length, depth, Math.round(length / 8), 10);
+  geo.rotateX(-Math.PI / 2); // flat; "along" is X, "across" is Z (from -depth/2 to depth/2)
+  const pos = geo.attributes.position;
+  const rock = new THREE.Color(theme.mountains);
+  const snow = new THREE.Color(0xf2f5f8);
+  const c = new THREE.Color();
+  const colors = [];
+  for (let i = 0; i < pos.count; i++) {
+    const along = pos.getX(i);
+    const across = Math.abs(pos.getZ(i)) / (depth / 2); // 0 on the ridge line, 1 at the edges
+    const top = ridgeHeight(along, seed);
+    // Steep in the middle, spreading out at the base: (1 − across)^1.6
+    const y = top * Math.pow(1 - across, 1.6) + Math.sin(along * 0.3 + across * 9) * 2 - 6;
+    pos.setY(i, y);
+    c.copy(rock).offsetHSL(0, 0, (y / SHORE.mountainHeight) * 0.08);
+    if (theme.snowcaps && y > top * 0.72 && top > SHORE.mountainHeight * 0.45) c.lerp(snow, 0.85);
+    colors.push(c.r, c.g, c.b);
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geo.computeVertexNormals();
+  return new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+}
+
+function createMountains(theme) {
+  const group = new THREE.Group();
+  const bounds = getWaterBounds();
+  const midZ = (bounds.minZ + bounds.maxZ) / 2;
+  const length = bounds.maxZ - bounds.minZ + 700;
+  const sideX = laneWidth() / 2 + SHORE.landSize + 60;
+  // One range down each side (turned so "along" runs down the course)...
+  for (const side of [-1, 1]) {
+    const range = createMountainRange(theme, length, 160, side * 7);
+    range.rotation.y = Math.PI / 2;
+    range.position.set(side * sideX, 0, midZ);
+    group.add(range);
+  }
+  // ...and one across the far end, beyond the portal.
+  const far = createMountainRange(theme, sideX * 2 + 200, 160, 3);
+  far.position.set(0, 0, bounds.minZ - SHORE.landSize - 90);
+  group.add(far);
+  return group;
 }
 
 // Home Lake: one big sheet for the lake bottom, beaches and hills.
@@ -425,7 +511,7 @@ function createSpaceSky() {
   // A big ringed planet and a small moon, far away.
   const planet = new THREE.Mesh(
     new THREE.SphereGeometry(70, 32, 16),
-    new THREE.MeshStandardMaterial({ color: 0xff9e6b, flatShading: true, fog: false })
+    new THREE.MeshStandardMaterial({ color: 0xff9e6b, roughness: 0.8, fog: false })
   );
   planet.position.set(-320, 140, -720);
   const ring = new THREE.Mesh(
@@ -436,13 +522,13 @@ function createSpaceSky() {
   planet.add(ring);
   const moon = new THREE.Mesh(
     new THREE.SphereGeometry(28, 24, 12),
-    new THREE.MeshStandardMaterial({ color: 0x9fb4ff, flatShading: true, fog: false })
+    new THREE.MeshStandardMaterial({ color: 0x9fb4ff, roughness: 0.8, fog: false })
   );
   moon.position.set(360, 90, -560);
   group.add(planet, moon);
 
   // Small rocks drifting below and beside the islands.
-  const rockGeo = new THREE.DodecahedronGeometry(1, 0);
+  const rockGeo = new THREE.DodecahedronGeometry(1, 1); // (detail 1 = rounder, less blocky)
   const rockMat = new THREE.MeshStandardMaterial({ color: 0x5a4b78, flatShading: true });
   for (let i = 0; i < 40; i++) {
     const rock = new THREE.Mesh(rockGeo, rockMat);
@@ -932,39 +1018,55 @@ function randomSpotNearShore(minD, maxD) {
   return { x: 0, z: bounds.maxZ + 60 };
 }
 
+// Pine trees: a trunk with three stacked cones of branches (smaller toward the top).
+// Every tree gets a slightly different size, lean and shade of green.
 function createTrees(theme) {
   const group = new THREE.Group();
-  const trunkGeo = new THREE.CylinderGeometry(0.4, 0.5, 3, 6);
-  const leafGeo = new THREE.ConeGeometry(2.2, 6, 7);
-  // Snowy pines get a white cone of snow on top.
-  const snowGeo = new THREE.ConeGeometry(1.3, 2.6, 7);
-  const snowMat = new THREE.MeshStandardMaterial({ color: 0xf6faff, flatShading: true });
-  const trunkMat = new THREE.MeshStandardMaterial({ color: COLORS.trunk, flatShading: true });
-  const leafMats = [
-    new THREE.MeshStandardMaterial({ color: COLORS.leaves, flatShading: true }),
-    new THREE.MeshStandardMaterial({ color: COLORS.leavesLight, flatShading: true }),
+  const trunkGeo = new THREE.CylinderGeometry(0.25, 0.45, 3, 7);
+  const layerGeo = new THREE.ConeGeometry(1, 1, 9);
+  const snowMat = new THREE.MeshStandardMaterial({ color: 0xf6faff, roughness: 0.8 });
+  const trunkMat = new THREE.MeshStandardMaterial({ color: COLORS.trunk, roughness: 1 });
+  // A few shades of green to pick from (sharing materials keeps it fast).
+  const leafMats = [];
+  const base = new THREE.Color(COLORS.leaves);
+  const light = new THREE.Color(COLORS.leavesLight);
+  for (let k = 0; k < 6; k++) {
+    const color = base.clone().lerp(light, k / 5).offsetHSL(THREE.MathUtils.randFloatSpread(0.02), 0, 0);
+    leafMats.push(new THREE.MeshStandardMaterial({ color, roughness: 0.9, flatShading: true }));
+  }
+  // The three layers: [radius, height, how high up]
+  const layers = [
+    [2.6, 3.6, 3.6],
+    [2.0, 3.2, 5.6],
+    [1.3, 2.8, 7.5],
   ];
 
   for (let i = 0; i < SHORE.treeCount; i++) {
-    const { x, z } = randomSpotNearShore(SHORE.sandWidth + 2, 70);
-    const scale = THREE.MathUtils.randFloat(0.8, 1.7);
+    const { x, z } = randomSpotNearShore(SHORE.sandWidth + 2, 95);
     const tree = new THREE.Group();
     const trunk = new THREE.Mesh(trunkGeo, trunkMat);
     trunk.position.y = 1.5;
-    const leaves = new THREE.Mesh(leafGeo, leafMats[i % 2]);
-    leaves.position.y = 5.5;
     trunk.castShadow = true;
-    leaves.castShadow = true;
-    tree.add(trunk, leaves);
+    tree.add(trunk);
+    const mat = leafMats[i % leafMats.length];
+    for (const [radius, height, y] of layers) {
+      const layer = new THREE.Mesh(layerGeo, mat);
+      layer.scale.set(radius, height, radius);
+      layer.position.y = y;
+      layer.castShadow = true;
+      tree.add(layer);
+    }
     if (theme.snowyTrees) {
-      const snow = new THREE.Mesh(snowGeo, snowMat);
-      snow.position.y = 7.4;
-      snow.castShadow = true;
+      const snow = new THREE.Mesh(layerGeo, snowMat);
+      snow.scale.set(0.9, 1.6, 0.9);
+      snow.position.y = 8.3;
       tree.add(snow);
     }
     tree.position.set(x, getTerrainHeight(x, z) - 0.2, z);
-    tree.scale.setScalar(scale);
-    tree.rotation.y = Math.random() * Math.PI;
+    // Taller and thinner, or shorter and wider: a little different every time
+    const scale = THREE.MathUtils.randFloat(0.8, 1.8);
+    tree.scale.set(scale * THREE.MathUtils.randFloat(0.85, 1.1), scale, scale * THREE.MathUtils.randFloat(0.85, 1.1));
+    tree.rotation.set(THREE.MathUtils.randFloatSpread(0.06), Math.random() * Math.PI, THREE.MathUtils.randFloatSpread(0.06));
     group.add(tree);
   }
   return group;
@@ -973,7 +1075,7 @@ function createTrees(theme) {
 function createRocks(theme) {
   const group = new THREE.Group();
   const rockGeo = new THREE.DodecahedronGeometry(1, 0);
-  const rockMat = new THREE.MeshStandardMaterial({ color: theme.rock || COLORS.rock, flatShading: true });
+  const rockMat = new THREE.MeshStandardMaterial({ color: theme.rock || COLORS.rock, flatShading: true, roughness: 0.9 });
 
   for (let i = 0; i < SHORE.rockCount; i++) {
     // Rocks sit on the beach, some right at the waterline.

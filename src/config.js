@@ -37,7 +37,8 @@ export const SHORE = {
   landSize: 130,     // how far the land reaches past the lake on every side
   terrainCellSize: 2.5, // size of each square in the land mesh
   hillHeight: 10,    // how tall the hills behind the beach get
-  treeCount: 110,
+  treeCount: 170,
+  mountainHeight: 110, // the tallest distant mountains
   rockCount: 40,
   reedCount: 90,     // clumps of cattails along the water's edge
   islandRim: 10,     // space islands: width of the grassy rim around the beach
@@ -75,16 +76,19 @@ export const RUNNER = {
   rushFov: 14,         // the view widens this many degrees at full rush (feels faster)
 };
 
-export const FLY = {
-  hoverHeight: 6,      // holding Fly climbs to this height (the "sky lane") and stays there
-  climbSpeed: 16,      // how fast it climbs (units per second)
-  gravity: 18,         // how fast it drops back down to the water when you let go
-  energyDrain: 0.17,   // energy used per second of flying (1 = full bar, so about 6 s)
-  energyRecharge: 0.45, // energy gained per second while floating on the water
-  coinEnergy: 0.035,   // each coin grabbed while flying gives back this much energy
-                       // (so following a sky trail keeps you up longer)
-  minEnergyToFly: 0.15, // need at least this much energy to take off again
+// Jumping: a quick hop to clear a log or a fish, then right back down to scoop coins.
+export const JUMP = {
+  speed: 12,           // how fast it pops up (units per second). Peak height = speed² ÷ (2 × gravity)
+  gravity: 30,         // how fast it comes back down (12 and 30 → about 2.4 high, 0.8 s in the air)
+  buffer: 0.15,        // pressing jump this many seconds before landing still counts
   landSplashSpeed: 5,  // landing faster than this makes a splash
+};
+
+// The big leap: at the end of a lake with another lake ahead (space, lava), the bobber
+// launches itself across the gap automatically, in a high arc.
+export const LEAP = {
+  height: 8,           // how high the arc goes
+  landInto: 8,         // lands this far into the next lake (so it never comes up short)
 };
 
 export const SHOOT = {
@@ -104,12 +108,11 @@ export const COURSE = {
   startFlagX: -6,      // where the little flag on the start line stands
 };
 
-// Ring gates: optional glowing hoops along the course. Fly or float through one for
+// Ring gates: optional glowing hoops along the course. Float through one for
 // points, a combo boost and a free zap.
 export const RINGS = {
   spacing: 55,         // about this far apart along the course
   radius: 3.4,         // size of the hoop (the hole you go through)
-  airChance: 0.4,      // chance a ring floats up high (you have to FLY through it)
   points: 50,          // points for going through (times your combo multiplier)
   comboBoost: 3,       // counts as this many coins for your combo
   zaps: 1,             // free zaps for going through
@@ -154,7 +157,7 @@ export const STARS = {
 // First-time tips: friendly cards that explain things the first time you see them.
 export const TIPS = {
   seconds: 5,        // how long each tip stays on screen
-  gapLookAhead: 45,  // show the "fly over the gap" tip when a gap is this close
+  jumpLookAhead: 22, // show the "jump over it" tip when an obstacle is this close ahead
 };
 
 // The swirling portal at the end of every level
@@ -205,7 +208,7 @@ export const HYPERSPACE = {
 //   bend / widthWiggle – how curvy the lake is
 //   width         – (optional) how wide the lakes are; LAKE.width if left out
 //   drag          – (optional) water drag; lower = more slippery (BOBBER.drag if left out)
-// Gaps between lakes have no water: you have to FLY across. Fall in and you lose a life!
+// Gaps between lakes have no water: at the end of each lake the bobber leaps across (see LEAP).
 // ---------------------------------------------------------------------------
 export const LEVELS = [
   {
@@ -259,20 +262,25 @@ export const LEVELS = [
 // among the stars.
 export const THEMES = {
   lake: {
-    sky: 0x8fd8ff,
-    fog: 0x9fdcff,
-    fogNear: 60,
-    fogFar: 300,
-    sun: 0xfff1d6,
-    sunIntensity: 2.2,
-    hemiSky: 0xcfeeff,
-    hemiGround: 0x4a7a3a,
-    hemiIntensity: 1.0,
-    water: 0x1fb5c9,   // bright candy turquoise
-    wetSand: 0xd8b878,
-    sand: 0xffe2a8,
-    grass: 0x7fdc5a,
-    grassDark: 0x56c23d,
+    sky: 0x5a93d6,
+    skyTop: 0x2f6cc0,  // deep blue straight up...
+    skyHorizon: 0xd3e5ee, // ...fading to a pale haze at the horizon
+    sunGlow: 0xfff0d0,
+    fog: 0xc9dde8,     // the haze color: far hills and mountains fade into it
+    fogNear: 90,
+    fogFar: 560,
+    sun: 0xfff2e0,
+    sunIntensity: 2.8,
+    hemiSky: 0xbcd6ea,
+    hemiGround: 0x51603a,
+    hemiIntensity: 0.8,
+    water: 0x2a7894,   // natural deep lake blue-green
+    wetSand: 0x9c8c66,
+    sand: 0xd8c9a2,
+    grass: 0x6e9a4b,
+    grassDark: 0x47703a,
+    mountains: 0x6f8399, // distant blue-gray mountains...
+    snowcaps: true,      // ...with snow on the peaks
     portal: 0xff7a1a,
     portalGlow: 0xffd180,
     wildlife: true,    // frogs and birds
@@ -281,6 +289,10 @@ export const THEMES = {
   },
   space: {
     sky: 0x05030f,
+    skyTop: 0x020108,
+    skyHorizon: 0x24124a,
+    skyBottom: 0x010006, // deep black below the islands (the black hole is down there)
+    sunGlow: 0x6a5cff,
     fog: 0x120a2a,
     fogNear: 90,
     fogFar: 360,
@@ -305,6 +317,9 @@ export const THEMES = {
   },
   lava: {
     sky: 0x1a0603,
+    skyTop: 0x0c0302,
+    skyHorizon: 0x5e1a08,
+    sunGlow: 0xff7a2a,
     fog: 0x3d1208,
     fogNear: 70,
     fogFar: 300,
@@ -331,6 +346,11 @@ export const THEMES = {
   },
   ice: {
     sky: 0x07102a,
+    skyTop: 0x02060f,
+    skyHorizon: 0x1b2f58,
+    sunGlow: 0x8fb6ff,
+    mountains: 0x2c3f5e, // dark mountains under the night sky
+    snowcaps: true,
     fog: 0x16264a,
     fogNear: 70,
     fogFar: 320,
@@ -429,7 +449,6 @@ export const COINS = {
   magnetRadius: 2.8,   // coins this close fly to you by themselves (so lined up = you get them)
   ringTrailChance: 0.7, // chance a trail that reaches a ring gate lines up through it
   hoverHeight: 0.9,    // how high above the water coins float
-  skyHeight: 6,        // height of coins in the sky (flying height)
   goldenChance: 1 / 6, // chance a trail ends with a Golden Lure
   zapPackChance: 1 / 5, // chance a Zap Pack floats between two trails
 };
@@ -526,6 +545,7 @@ export const CAMERA = {
   distance: 18,        // how far behind the bobber
   lookAhead: 22,       // the camera looks at a point this far in front of the bobber
   followSpeed: 6,      // higher = camera catches up faster (it never snaps)
+  leapFollowSpeed: 18, // ...and while leaping across a gap (the bobber is going fast)
   sideFollow: 0.35,    // how much the camera slides left/right with the bobber (0–1).
                        // Less than 1 means a still cursor points at a fixed spot on the
                        // water, so the bobber goes there and stops (instead of drifting forever).
@@ -533,11 +553,14 @@ export const CAMERA = {
 
 // The cartoon look (see style.js)
 export const STYLE = {
+  toon: false,             // true = flat cartoon shading bands; false = smooth, modern shading
   outlineColor: 0x1b1b2f,  // dark navy outlines (softer than pure black)
-  outlineThickness: 0.08,  // outlines are this much bigger than the shape (8%)
+  outlineThickness: 0.035, // outlines are this much bigger than the shape (3.5%: a thin edge)
 };
 
 export const SCENE = {
+  exposure: 1.0,       // overall brightness after tone mapping
+  reflections: 0.6,    // how strongly things reflect the sky (each theme can change it)
   cameraFov: 60,
   portraitFov: 78,     // wider view when the screen is taller than it is wide (phone held upright)
   maxPixelRatio: 2,
@@ -557,10 +580,10 @@ export const MOBILE = {
 export const COLORS = {
   wood: 0x8b5a2b,
   woodDark: 0x5e3a1a,
-  trunk: 0x6b4423,
-  leaves: 0x2f7d32,
-  leavesLight: 0x3f9142,
-  rock: 0x8a8d91,
+  trunk: 0x5a4030,
+  leaves: 0x2c5a36,      // deep natural pine greens
+  leavesLight: 0x3b6e40,
+  rock: 0x86888a,
   reed: 0x5c8a3a,
   cattail: 0x5a3b1e,
   tackleBox: 0x2e7d32,
@@ -602,7 +625,6 @@ export const COLORS = {
   wake: 0xffffff,
   zap: 0x7df9ff,
   ringWater: 0xffc107, // gold hoops on the water
-  ringSky: 0xd16bff,   // purple hoops up in the sky
   zapPack: 0x00e5ff,
   zapGlow: 0x00b8d4,
   confetti: [0xff7a1a, 0x43d36b, 0x42a5f5, 0xffeb3b, 0xe53935, 0xffffff],

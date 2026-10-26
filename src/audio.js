@@ -425,31 +425,45 @@ export function playGoldenDing() {
   [1047, 1319, 1568, 2093, 2637].forEach((f, i) => tone(f, i * 0.06, 0.35, 'sine', 0.14));
 }
 
-// ----- Flying "whoosh" -----
-// A looping soft noise whose volume follows how hard the bobber is flying.
-let thrustGain = null;
-function startThrustSound() {
+// Jump: a quick springy "boing" that slides up.
+export function playJump() {
+  if (!ctx || ctx.state !== 'running') return;
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(260, t);
+  osc.frequency.exponentialRampToValueAtTime(720, t + 0.15);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.16 * AUDIO.effectsVolume + 0.0001, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+  osc.connect(g).connect(master);
+  osc.start(t);
+  osc.stop(t + 0.22);
+}
+
+// The big leap across a gap: a rising "whoosh" of noise plus a happy rising arpeggio.
+export function playLeap() {
+  if (!ctx || ctx.state !== 'running' || !noise) return;
+  const t = ctx.currentTime;
   const src = ctx.createBufferSource();
   src.buffer = noise;
-  src.loop = true;
   const filter = ctx.createBiquadFilter();
   filter.type = 'bandpass';
-  filter.frequency.value = 700;
-  filter.Q.value = 0.8;
-  thrustGain = ctx.createGain();
-  thrustGain.gain.value = 0;
-  src.connect(filter).connect(thrustGain).connect(master);
-  src.start();
+  filter.Q.value = 1.2;
+  filter.frequency.setValueAtTime(300, t);
+  filter.frequency.exponentialRampToValueAtTime(2500, t + 0.7);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.25 * AUDIO.effectsVolume + 0.0001, t + 0.2);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
+  src.connect(filter).connect(g).connect(master);
+  src.start(t);
+  src.stop(t + 1.3);
+  [392, 523, 659, 784].forEach((f, i) => tone(f, i * 0.07, 0.25, 'triangle', 0.12));
 }
 
-// level: 0 = silent, 1 = full whoosh. Changes smoothly so it never clicks.
-export function setThrust(level) {
-  if (!ctx || ctx.state !== 'running') return;
-  if (!thrustGain) startThrustSound();
-  thrustGain.gain.setTargetAtTime(level * 0.12 * AUDIO.effectsVolume, ctx.currentTime, 0.08);
-}
-
-// Splashing down after a flight: a short "ploop".
+// Splashing down after a jump: a short "ploop".
 export function playPlop() {
   tone(300, 0, 0.18, 'sine', 0.18);
   tone(160, 0.04, 0.25, 'sine', 0.15);

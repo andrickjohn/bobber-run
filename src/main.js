@@ -7,9 +7,9 @@
 
 import './style.css'; // how the HUD and menus look
 import * as THREE from 'three';
-import { CAMERA, BOBBER, OBSTACLES, EFFECTS, FLY, SHOOT, PORTAL, LEVELS, HYPERSPACE, BLACK_HOLE, RINGS, COMBO, CATCH, INTRO, STARS, TIPS, RUNNER } from './config.js';
+import { CAMERA, BOBBER, OBSTACLES, EFFECTS, SHOOT, PORTAL, LEVELS, HYPERSPACE, BLACK_HOLE, RINGS, COMBO, CATCH, INTRO, STARS, TIPS, RUNNER } from './config.js';
 import { createScene, getChaseCameraPose } from './scene.js';
-import { createWorld, lakeCenterX, setLevel, getLevel, getTheme, isOverLake } from './world.js';
+import { createWorld, lakeCenterX, setLevel, getLevel, getTheme } from './world.js';
 import { createBobber } from './bobber.js';
 import { createCourse } from './course.js';
 import { createCombo } from './combo.js';
@@ -24,7 +24,7 @@ import { createShooter } from './shooting.js';
 import { createHyperspace } from './hyperspace.js';
 import { createUI } from './ui.js';
 import { loadSettings, saveSettings, applySettings, loadBestScores, recordScore, loadStars, recordStars, loadTipsSeen, saveTipsSeen } from './settings.js';
-import { playChime, playFanfare, playSplash, playGameOver, playComboDing, playMultiplierUp, playComboBreak, playGoldenDing, setMuted, setThrust, playPlop, playZap, playPoof, playFall, setAmbientTheme, playReload, setPortalHum, playHyperspace, playBlackHole, playToyDrop, playToyMerge, playCatch, playCoolerPop, playOverflow, playCountBeep, playTip } from './audio.js';
+import { playChime, playFanfare, playSplash, playGameOver, playComboDing, playMultiplierUp, playComboBreak, playGoldenDing, setMuted, playJump, playLeap, playPlop, playZap, playPoof, playFall, setAmbientTheme, playReload, setPortalHum, playHyperspace, playBlackHole, playToyDrop, playToyMerge, playCatch, playCoolerPop, playOverflow, playCountBeep, playTip } from './audio.js';
 
 const canvas = document.getElementById('game');
 const { renderer, scene, camera, followWithSun, applyTheme } = createScene(canvas);
@@ -201,13 +201,13 @@ function tip(id, icon, html, urgent = false) {
 
 function updateTips() {
   if (game.state !== 'playing') return;
-  // Fly tip: when a gap in the water is coming up and you're not flying yet.
-  // (Past the portal there's no water either, but that's not a gap.)
-  const ahead = bobber.position.z - TIPS.gapLookAhead;
-  if (!tipsSeen.has('fly') && !bobber.flight.flying && ahead > getLevel().finishZ &&
-      isOverLake(bobber.position.z, 0) && !isOverLake(ahead, 0)) {
+  // Jump tip: when an obstacle is coming up right in front of you.
+  if (!tipsSeen.has('jump') && obstacles.getHitCircles().some((c) => {
+    const dz = bobber.position.z - c.z;
+    return dz > 6 && dz < TIPS.jumpLookAhead && Math.abs(c.x - bobber.position.x) < 4;
+  })) {
     const touch = document.body.classList.contains('touch');
-    tip('fly', '🚀', touch ? 'Gap ahead! Hold <b>FLY</b> to soar over it.' : 'Gap ahead! Hold <b>Space</b> to fly over it.', true);
+    tip('jump', '⤴️', touch ? 'Something ahead! Tap <b>JUMP</b> to hop over it.' : 'Something ahead! Press <b>Space</b> (or click) to hop over it.', true);
   }
   // Catch tip: when a school of little fish is close ahead.
   if (!tipsSeen.has('catch') && catchFish.list.some((f) => {
@@ -443,8 +443,7 @@ ui.on('pause', togglePause);
 ui.on('quit', goToTitle);
 ui.on('restart', restartLevel);
 // On-screen touch buttons
-ui.on('flyDown', () => bobber.setFlyButton(true));
-ui.on('flyUp', () => bobber.setFlyButton(false));
+ui.on('jumpDown', () => bobber.setJumpButton(true));
 ui.on('zapDown', () => shooter.setButton(true));
 ui.on('zapUp', () => shooter.setButton(false));
 ui.on('mute', toggleMute);
@@ -544,7 +543,7 @@ function updateCourse(dt, time) {
     bobber.boing(1.5);
     shakeTimer = Math.max(shakeTimer, EFFECTS.shakeTime * 0.4);
     effects.sparkle(r.x, r.y, r.z, true);
-    ui.bigPop(r.inAir ? 'SKY RING!' : 'RING!', 'ring');
+    ui.bigPop('RING!', 'ring');
     comboFeedback(result);
     ui.setProgressTicks(course.progressTicks());
     tip('ring', '⭕', 'Ring gates give <b>big points</b>, a combo boost and a free zap. Some are up in the sky!');
@@ -555,7 +554,7 @@ function updateCourse(dt, time) {
     world.openPortal();
     playMultiplierUp(6);
     ui.bigPop('PORTAL OPEN!', 'ring');
-    tip('portal', '🌀', 'The <b>portal</b> is open at the end of the course. Fly into it to finish the world!');
+    tip('portal', '🌀', 'The <b>portal</b> is open at the end of the course. Ride into it to finish the world!');
   }
   // Close to the open portal, it pulls you toward its middle (so you can't miss it).
   const toPortal = bobber.position.z - getLevel().finishZ;
@@ -593,7 +592,6 @@ function updateCoins(dt, time) {
       const result = combo.add(p.golden ? 2 : 1);
       playComboDing(combo.count);
       bobber.addRush(); // each coin gives a little burst of speed
-      if (bobber.flight.flying) bobber.flight.energy = Math.min(1, bobber.flight.energy + FLY.coinEnergy);
       tip('combo', '🔥', 'Stay lined up and grab the <b>whole trail</b> for a PERFECT TRAIL bonus. Every 5 coins in a row raises your <b>multiplier</b>!');
       bobber.boing(p.golden ? 1.5 : 0.6);
       if (p.golden) {
@@ -815,7 +813,9 @@ function updateCamera(dt) {
   placeCamera(bobber.position);
   // 1 - e^(-speed × dt) is the fraction of the gap to close this frame.
   // It gives the same smooth feel at 30 fps or 144 fps.
-  const t = 1 - Math.exp(-CAMERA.followSpeed * dt);
+  // (During a big leap the bobber is very fast, so the camera keeps up more tightly.)
+  const followSpeed = bobber.flight.leaping ? CAMERA.leapFollowSpeed : CAMERA.followSpeed;
+  const t = 1 - Math.exp(-followSpeed * dt);
   cameraBase.lerp(wantedPosition, t);
   cameraLookAt.lerp(wantedLookAt, t);
   // Rushing (grabbing lots of coins): the view widens a little, so it FEELS faster.
@@ -892,8 +892,13 @@ function step(dt) {
     return;
   }
   if (flightEvent && flightEvent.fell) fellIntoSpace();
+  if (flightEvent && flightEvent.jumped) playJump();
+  if (flightEvent && flightEvent.leaped) {
+    playLeap();
+    ui.bigPop('BIG LEAP!', 'ring');
+  }
   if (flightEvent && flightEvent.landed && game.state === 'playing') {
-    // Splashing down after a flight
+    // Splashing down after a jump
     effects.splash(bobber.position.x, bobber.mesh.position.y - BOBBER.floatOffset, bobber.position.z, 0.6);
     playPlop();
   }
@@ -907,8 +912,6 @@ function step(dt) {
   if (game.update(dt)) respawn(); // true when the respawn wait just finished
   ui.setTimer(formatTime(game.time));
   ui.setProgress(bobber.position.z / getLevel().finishZ);
-  const f = bobber.flight;
-  ui.setEnergy(f.energy, !f.flying && f.energy < FLY.minEnergyToFly);
   if (game.state === 'playing' && !game.isRespawning()) bobber.setVisible(game.blinkVisible());
 
   updateTips();
@@ -924,8 +927,6 @@ function loop(now = performance.now()) {
   const dt = Math.min((now - lastFrameTime) / 1000, 0.05);
   lastFrameTime = now;
   step(Math.max(0, dt));
-  // Flying whoosh: on while flying during a race, off otherwise (including when paused).
-  setThrust(game.state === 'playing' && bobber.flight.flying ? 1 : 0);
   // Portal hum: fades in over the last 80 units before the portal.
   const toPortal = Math.abs(bobber.position.z - getLevel().finishZ);
   setPortalHum(game.state === 'playing' ? Math.max(0, 1 - toPortal / 80) : 0);
