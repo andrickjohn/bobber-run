@@ -256,9 +256,9 @@ export function createUI() {
         <div class="title-side">
           <p class="howto">${
             touch
-              ? 'Drag to steer · hold <b>FLY</b> · tap <b>ZAP</b>'
-              : 'Mouse to steer · hold <b>Space</b> to fly · <b>F</b> to zap'
-          }<br>Swoop through coin trails for combos, catch fish, fly into the portal!</p>
+              ? 'Drag left/right to steer · hold <b>FLY</b> · tap <b>ZAP</b>'
+              : 'Point left/right to steer · <b>Space</b> to fly · <b>F</b> to zap · <b>↑</b> boost'
+          }<br>Line up with coin trails and zoom through them all, catch fish, fly into the portal!</p>
           ${touch && window.innerHeight > window.innerWidth ? '<p class="note">📱 Turn your phone sideways for a bigger view</p>' : ''}
           <div class="level-picker"><span>Or jump to a world:</span><div class="choices">${levelButtons}</div></div>
           <div class="title-footer">
@@ -438,6 +438,7 @@ export function createUI() {
       return `<table>
         ${row(`Coins (${b.coinCount})`, b.coins)}
         ${row(`Golden Lures (${b.goldenCount})`, b.goldenLures)}
+        ${row(`Perfect trails (${b.perfectCount})`, b.trails)}
         ${row(`Rings (${b.ringCount})`, b.rings)}
         ${b.zapCount ? row(`Zapped (${b.zapCount})`, b.zaps) : ''}
         ${row(`Cooler pops (${b.popCount} of ${b.catchCount} caught)`, b.cooler)}

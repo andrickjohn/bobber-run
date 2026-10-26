@@ -97,8 +97,9 @@ export function createCourse(scene) {
   // its middle to be inside the ring?
   function reachedPortal(prev, now) {
     const fz = getLevel().finishZ;
-    const crossed = prev.z > fz && now.z <= fz;
-    return crossed && Math.abs(now.x - lakeCenterX(fz)) <= PORTAL.radius;
+    // (The portal pulls you toward its middle as you get close, see main.js, so
+    // crossing the finish line anywhere counts.)
+    return prev.z > fz && now.z <= fz;
   }
 
   // Where to put the bobber back after losing a life: a little behind where it happened,
@@ -114,7 +115,7 @@ export function createCourse(scene) {
 
   // Ring spots (so obstacles can stay away from them) and how many there are.
   function getRingSpots() {
-    return rings.map((r) => ({ x: r.x, z: r.z }));
+    return rings.map((r) => ({ x: r.x, z: r.z, inAir: r.inAir }));
   }
 
   // For the progress bar: how far along each ring is (0 = start, 1 = portal), and

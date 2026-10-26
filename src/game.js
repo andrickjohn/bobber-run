@@ -25,13 +25,14 @@ export function createGame() {
     time: 0,            // race timer in seconds
     timerRunning: false, // starts when the bobber leaves the dock
     // Points so far, kept separately so we can show a breakdown at the end.
-    points: { coins: 0, goldenLures: 0, rings: 0, zaps: 0, cooler: 0 },
+    points: { coins: 0, goldenLures: 0, rings: 0, zaps: 0, cooler: 0, trails: 0 },
     ringCount: 0,
     catchCount: 0,      // fish caught into the cooler
     popCount: 0,        // fish popped (three in a row)
     zapCount: 0,
     coinCount: 0,
     goldenCount: 0,
+    perfectCount: 0,    // coin trails collected completely
     levelIndex: 0,      // which level we're on (0 = the first)
     runTotal: 0,        // points from levels already finished in this run
 
@@ -51,13 +52,14 @@ export function createGame() {
       game.respawnTimer = 0;
       game.time = 0;
       game.timerRunning = false;
-      game.points = { coins: 0, goldenLures: 0, rings: 0, zaps: 0, cooler: 0 };
+      game.points = { coins: 0, goldenLures: 0, rings: 0, zaps: 0, cooler: 0, trails: 0 };
       game.ringCount = 0;
       game.catchCount = 0;
       game.popCount = 0;
       game.zapCount = 0;
       game.coinCount = 0;
       game.goldenCount = 0;
+      game.perfectCount = 0;
     },
 
     // ----- Scoring -----
@@ -73,6 +75,13 @@ export function createGame() {
       const points = SCORING.goldenLure * multiplier;
       game.goldenCount++;
       game.points.goldenLures += points;
+      return points;
+    },
+    // Every coin in a trail collected: a bonus.
+    addPerfectTrail(multiplier = 1) {
+      const points = SCORING.perfectTrail * multiplier;
+      game.perfectCount++;
+      game.points.trails += points;
       return points;
     },
     addRing(multiplier = 1) {
@@ -96,7 +105,7 @@ export function createGame() {
     // The score during the race (before finish bonuses and the difficulty multiplier).
     currentScore() {
       const p = game.points;
-      return p.coins + p.goldenLures + p.rings + p.zaps + p.cooler;
+      return p.coins + p.goldenLures + p.rings + p.zaps + p.cooler + p.trails;
     },
 
     // Total for the whole run so far, counting the level we're on (used for Game Over).
@@ -117,6 +126,8 @@ export function createGame() {
         coinCount: game.coinCount,
         goldenLures: game.points.goldenLures,
         goldenCount: game.goldenCount,
+        trails: game.points.trails,
+        perfectCount: game.perfectCount,
         rings: game.points.rings,
         ringCount: game.ringCount,
         zaps: game.points.zaps,

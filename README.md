@@ -17,19 +17,21 @@ Plays on computers, tablets and phones.
 
 | Computer | Phone / tablet | What it does |
 |---|---|---|
-| **Mouse** (just move it) | **Drag your finger** | The bobber glides toward where you point |
-| **Arrow keys / W A S D** | | Steer with the keyboard instead |
-| Hold **Space** or the **left mouse button** | Hold **FLY** | Fly up, hover, then glide down when you let go |
+| **Mouse** (point left or right) | **Drag your finger** | The bobber cruises forward by itself; it slides over to line up with where you point |
+| **← → / A D** | | Steer left and right with the keyboard instead |
+| **↑ / W** and **↓ / S** | | Speed boost and brake |
+| Hold **Space** or the **left mouse button** | Hold **FLY** | Fly up to the sky lane, drop back down when you let go |
 | **F** or **right-click** | Tap **ZAP** | Fire a zap at what you're aiming at |
 | **P** or **Esc** | ⏸ button | Pause |
 | **R** | ↻ button | Restart the level |
 | **M** | Sound button | Sound on/off |
 
-- **Coins come in trails** (lines, waves, zigzags, circles, arches and spirals into the sky). Every coin in a row builds your 🔥 **combo**: every 5 in a row raises the multiplier (×2, ×3 … ×10), and each coin's "ding" is a little higher than the last. Wait too long between coins, or get hit, and the combo breaks.
+- **It's like a runner game:** the bobber always cruises forward, and there are just two heights, the water and the **sky lane**. That makes everything easy to line up.
+- **Coins come in trails** that run straight down the course: straight lines, smooth lane changes, gentle curves, and hops up into the sky lane. Some line up right through a ring gate, and over the gaps between lakes they float in the sky lane to show you the way across. Coins close to you fly to you by themselves, so if you're lined up you'll get them. Grab **every coin in a trail** for a **PERFECT TRAIL** bonus! Each coin also gives you a little burst of speed. Every coin in a row builds your 🔥 **combo**: every 5 in a row raises the multiplier (×2, ×3 … ×10), and each coin's "ding" is a little higher than the last. Wait too long between coins, or get hit, and the combo breaks.
 - **Catch & stack:** colorful little fish swim in schools; bump into them (or zap them, or zap a bass or pike) to **catch** them. Caught fish drop into the **cooler** on the side of the screen. **Three of a color in a row** (up/down or across) **pop** for big points, and fish falling into the gaps can set off **chains**. Fill the cooler with nothing to pop and it overflows: you lose your combo!
 - **Ring gates** are optional glowing hoops: gold ones on the water, purple ones up in the sky. Go through one for points (times your combo), a combo boost and a free zap.
 - Getting hit by a fish, turtle, lure or log costs a life and your combo. You come back a little behind where it happened and blink for a moment (safe).
-- **Flying** uses energy (the ⚡ bar), which recharges while you float on the water. Fly over obstacles, grab coins floating in the sky, and cross the gaps between space lakes. Fall into a gap and you lose a life!
+- **Flying** uses energy (the ⚡ bar), which recharges while you float on the water. Coins grabbed while flying give some energy back, so following a sky trail keeps you up longer. The open portal pulls you toward its middle, so you can't miss it. Fly over obstacles, grab coins floating in the sky, and cross the gaps between space lakes. Fall into a gap and you lose a life!
 - **Zaps** (the 🎯 dots) knock obstacles out for points. They reload slowly; grab **⚡ Zap Packs** (+3) and go through ring gates (+1) to earn more.
 - **Lily pads** slow you down and **whirlpools** (Hard only) pull you in, but neither costs a life (and you can fly right over them).
 
@@ -75,6 +77,7 @@ ever shows once.
 | Event | Points |
 |---|---|
 | Coin | +10 × combo multiplier |
+| Perfect trail (every coin in a trail) | +100 × combo multiplier |
 | Golden Lure (ends some trails) | +50 × combo multiplier |
 | Ring gate | +50 × combo multiplier |
 | Each fish popped in the cooler | +30 × chain number × combo multiplier |

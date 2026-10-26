@@ -7,7 +7,7 @@
 
 import './style.css'; // how the HUD and menus look
 import * as THREE from 'three';
-import { CAMERA, BOBBER, OBSTACLES, EFFECTS, FLY, SHOOT, PORTAL, LEVELS, HYPERSPACE, BLACK_HOLE, RINGS, COMBO, CATCH, INTRO, STARS, TIPS } from './config.js';
+import { CAMERA, BOBBER, OBSTACLES, EFFECTS, FLY, SHOOT, PORTAL, LEVELS, HYPERSPACE, BLACK_HOLE, RINGS, COMBO, CATCH, INTRO, STARS, TIPS, RUNNER } from './config.js';
 import { createScene, getChaseCameraPose } from './scene.js';
 import { createWorld, lakeCenterX, setLevel, getLevel, getTheme, isOverLake } from './world.js';
 import { createBobber } from './bobber.js';
@@ -94,6 +94,7 @@ function setUpCourse() {
   bobber.reset(0, BOBBER.startZ);
   bobber.setVisible(true);
   coins.clear();
+  coins.setRingSpots(course.getRingSpots()); // some coin trails line up through the rings
   shooter.clear();
   snapCamera();
   resetHUD();
@@ -180,8 +181,8 @@ function go() {
   setTimeout(() => game.state !== 'countdown' && ui.showCountdown(''), 900);
   const touch = document.body.classList.contains('touch');
   tip('steer', touch ? '👆' : '👉', touch
-    ? 'Drag your finger to <b>steer</b>. Swoop through the coin trails!'
-    : 'Move the <b>mouse</b> (or arrow keys) to steer. Swoop through the coin trails!');
+    ? 'You cruise forward by yourself. Drag left and right to <b>line up</b> with the coin trails!'
+    : 'You cruise forward by yourself. Point left and right (or use the arrow keys) to <b>line up</b> with the coin trails!');
 }
 
 // ---------------------------------------------------------------------------
@@ -556,6 +557,13 @@ function updateCourse(dt, time) {
     ui.bigPop('PORTAL OPEN!', 'ring');
     tip('portal', '🌀', 'The <b>portal</b> is open at the end of the course. Fly into it to finish the world!');
   }
+  // Close to the open portal, it pulls you toward its middle (so you can't miss it).
+  const toPortal = bobber.position.z - getLevel().finishZ;
+  if (game.state === 'playing' && portalOpen && toPortal > 0 && toPortal < PORTAL.pullDistance) {
+    const closeness = 1 - toPortal / PORTAL.pullDistance; // 0 far away → 1 at the portal
+    const middleX = lakeCenterX(getLevel().finishZ);
+    bobber.position.x += (middleX - bobber.position.x) * (1 - Math.exp(-PORTAL.pullStrength * closeness * dt));
+  }
   if (game.state === 'playing' && course.reachedPortal(previousPosition, bobber.position)) {
     game.state = 'won';
     playFanfare();
@@ -584,7 +592,9 @@ function updateCoins(dt, time) {
       // Coins and Golden Lures build the combo. Each "ding" is a little higher than the last!
       const result = combo.add(p.golden ? 2 : 1);
       playComboDing(combo.count);
-      tip('combo', '🔥', 'Grab coins <b>quickly, one after another</b> for a combo. Every 5 in a row raises your <b>multiplier</b>!');
+      bobber.addRush(); // each coin gives a little burst of speed
+      if (bobber.flight.flying) bobber.flight.energy = Math.min(1, bobber.flight.energy + FLY.coinEnergy);
+      tip('combo', '🔥', 'Stay lined up and grab the <b>whole trail</b> for a PERFECT TRAIL bonus. Every 5 coins in a row raises your <b>multiplier</b>!');
       bobber.boing(p.golden ? 1.5 : 0.6);
       if (p.golden) {
         playGoldenDing();
@@ -594,6 +604,14 @@ function updateCoins(dt, time) {
         scorePoints(game.addCoin(combo.multiplier));
       }
       comboFeedback(result);
+      if (p.perfect) {
+        // Got every coin in the trail!
+        scorePoints(game.addPerfectTrail(combo.multiplier));
+        playMultiplierUp(4);
+        bobber.addRush(RUNNER.rushMax); // full speed rush!
+        ui.bigPop('PERFECT TRAIL!', 'milestone');
+        effects.sparkle(p.x, p.y, p.z, true);
+      }
     }
   }
 }
@@ -800,6 +818,12 @@ function updateCamera(dt) {
   const t = 1 - Math.exp(-CAMERA.followSpeed * dt);
   cameraBase.lerp(wantedPosition, t);
   cameraLookAt.lerp(wantedLookAt, t);
+  // Rushing (grabbing lots of coins): the view widens a little, so it FEELS faster.
+  const wantedFov = camera.userData.baseFov + bobber.rush * RUNNER.rushFov;
+  if (Math.abs(camera.fov - wantedFov) > 0.01) {
+    camera.fov += (wantedFov - camera.fov) * t;
+    camera.updateProjectionMatrix();
+  }
   camera.position.copy(cameraBase);
   // Shake after a hit: jolt the camera a random amount, getting weaker as the timer runs out.
   if (shakeTimer > 0) {

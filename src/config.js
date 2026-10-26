@@ -47,12 +47,8 @@ export const SHORE = {
 export const BOBBER = {
   radius: 0.8,
   speedSetting: 5,     // 1–10, the "Bobber Speed" slider (5 = normal)
-  maxSpeed: 16,        // top speed at setting 5 (units per second)
-  acceleration: 55,    // strongest pull toward the cursor at setting 5 (higher = snappier)
-  pullScreenDistance: 0.3, // cursor this far from the bobber ON SCREEN gives the full pull
-                           // (1.0 = half the screen height), same forward and backward
-  deadZone: 1.2,       // cursor closer than this does nothing (stops jitter)
-  drag: 3.3,           // water drag: higher = stops sooner (a little glide, not a long slide)
+  drag: 3.3,           // normal water drag. Levels with less drag (icy water) make
+                       // sideways steering slippery (see RUNNER.sideGrip)
   bounce: 0.4,         // how much speed is kept when bumping the shoreline
   bobHeight: 0.15,     // extra up/down bobbing on top of the waves
   bobSpeed: 3,
@@ -61,12 +57,32 @@ export const BOBBER = {
   startZ: -3,          // where the bobber starts (just past the end of the dock)
 };
 
+// Runner-style steering: the bobber always cruises forward on its own (like a runner
+// game), and you only steer LEFT and RIGHT. Point at something and the bobber slides
+// over to line up with it. Up = speed boost, down = brake.
+export const RUNNER = {
+  cruiseSpeed: 15,     // forward speed at Bobber Speed 5 (units per second)
+  boost: 1.35,         // holding Up / W goes this many times faster
+  brake: 0.45,         // holding Down / S slows to this fraction
+  forwardGrip: 3,      // how quickly it gets up to speed (higher = quicker)
+  sideSpeed: 22,       // fastest it can slide sideways
+  sideGain: 6,         // how strongly it heads for the spot you point at
+  sideGrip: 10,        // how quickly the sideways slide responds (lower = slippery)
+  keySteer: 1.6,       // how fast the arrow keys move your lane (lake widths per second)
+  rushPerCoin: 0.035,  // each coin gives a little extra speed ("rush")...
+  rushMax: 0.45,       // ...up to this much extra (0.45 = 45% faster)
+  rushDecay: 0.25,     // and the rush fades by this much per second
+  rushFov: 14,         // the view widens this many degrees at full rush (feels faster)
+};
+
 export const FLY = {
-  hoverHeight: 6,      // holding Fly climbs to this height and hovers there
-  climbSpeed: 9,       // how fast it climbs (units per second)
-  gravity: 9,          // how fast it falls/glides back down when you let go
-  energyDrain: 0.22,   // energy used per second of flying (1 = full bar, so about 4.5 s)
-  energyRecharge: 0.35, // energy gained per second while floating on the water
+  hoverHeight: 6,      // holding Fly climbs to this height (the "sky lane") and stays there
+  climbSpeed: 16,      // how fast it climbs (units per second)
+  gravity: 18,         // how fast it drops back down to the water when you let go
+  energyDrain: 0.17,   // energy used per second of flying (1 = full bar, so about 6 s)
+  energyRecharge: 0.45, // energy gained per second while floating on the water
+  coinEnergy: 0.035,   // each coin grabbed while flying gives back this much energy
+                       // (so following a sky trail keeps you up longer)
   minEnergyToFly: 0.15, // need at least this much energy to take off again
   landSplashSpeed: 5,  // landing faster than this makes a splash
 };
@@ -146,6 +162,8 @@ export const PORTAL = {
   radius: 9,           // size of the ring
   tube: 0.9,           // thickness of the ring
   centerHeight: 6,     // how high the middle of the ring is above the water
+  pullDistance: 40,    // the open portal starts pulling you toward its middle this close
+  pullStrength: 6,     // how strongly it pulls
   spinSpeed: 1.6,      // how fast the swirl spins
   openAt: 0.7,         // the portal opens once you're this far along the course (0.7 = 70%)
 };
@@ -398,12 +416,18 @@ export const WILDLIFE = {
 };
 
 export const COINS = {
-  // Coins come in trails: lines, waves, zigzags, circles and spirals into the sky.
-  aheadDistance: 110,  // trails are laid out this far ahead of the bobber
+  // Coins come in trails that run straight down the course, in "lanes": straight lines,
+  // smooth lane changes, gentle curves, and hops up into the sky lane. Line up and
+  // zoom through the whole trail!
+  aheadDistance: 130,  // trails are laid out this far ahead of the bobber
   gapMin: 14,          // empty water between one trail and the next (difficulty changes these)
   gapMax: 26,
-  spacing: 3.6,        // distance between coins in a trail
+  spacing: 3.2,        // distance between coins in a trail
+  trailMin: 9,         // coins in a trail
+  trailMax: 15,
   pickupRadius: 1.0,   // coin size for touching
+  magnetRadius: 2.8,   // coins this close fly to you by themselves (so lined up = you get them)
+  ringTrailChance: 0.7, // chance a trail that reaches a ring gate lines up through it
   hoverHeight: 0.9,    // how high above the water coins float
   skyHeight: 6,        // height of coins in the sky (flying height)
   goldenChance: 1 / 6, // chance a trail ends with a Golden Lure
@@ -418,6 +442,7 @@ export const SCORING = {
   timeBonusPerSecond: 2,
   perLifeLeft: 100,
   zap: 25,               // zapping an obstacle
+  perfectTrail: 100,     // collecting EVERY coin in a trail (times your combo multiplier)
   coolerPop: 30,         // each fish popped in the cooler (times the chain and your combo)
   // (Ring gates are worth RINGS.points, times your combo multiplier.)
   difficulty: 'normal',  // 'easy', 'normal' or 'hard' (default; the settings screen changes it)

@@ -1,15 +1,15 @@
 // bobber.js
 // The player: a red-and-white fishing bobber.
-// It floats on the waves and glides toward wherever the mouse is pointing on the water.
-// On a touchscreen, drag a finger: the bobber glides toward it.
-// The arrow keys (or W/A/S/D) can steer it too.
-// Holding Space (or the mouse button) makes it FLY: it climbs to hover height and stays
-// there until you let go or run out of energy, then glides back down to the water.
+// It cruises forward down the course by itself, like in a runner game. You steer only
+// LEFT and RIGHT: it slides over to line up with wherever the mouse (or your finger)
+// points. The arrow keys (or A/D) steer too; Up/W is a speed boost and Down/S brakes.
+// Holding Space (or the mouse button) makes it FLY: it climbs up to the "sky lane" and
+// stays there until you let go or run out of energy, then drops back down to the water.
+// So there are just two heights, water and sky, which makes coin trails easy to line up.
 // Over a gap between space lakes there's no water to land on: it falls into space!
 
 import * as THREE from 'three';
-import { BOBBER, FLY, SHOOT, COLORS } from './config.js';
-import { getChaseCameraPose } from './scene.js';
+import { BOBBER, FLY, SHOOT, COLORS, RUNNER } from './config.js';
 import { cartoon } from './style.js';
 import { getWaveHeight, getLakeEdges, getWaterBounds, isOverLake, getLakeAt, getLevel } from './world.js';
 
@@ -76,6 +76,11 @@ export function createBobber(scene, camera, canvas) {
   // Squash and stretch: a springy height (1 = normal, more = tall and thin, less = squashed).
   const squash = { y: 1, speed: 0 };
   let speedSetting = BOBBER.speedSetting;
+  // Where across the lake the keyboard is steering to: -1 = left shore, 0 = middle, 1 = right.
+  let keyLane = 0;
+  let usingKeys = false;
+  // "Rush": extra speed from grabbing coins one after another (0 = none).
+  let rush = 0;
   let controlsEnabled = true; // turned off when the game is over or won
 
   // ----- Mouse and finger -----
@@ -87,6 +92,7 @@ export function createBobber(scene, camera, canvas) {
   let steeringFinger = null; // which finger is steering (each touch has its own id)
 
   function pointAt(e) {
+    usingKeys = false;
     const rect = canvas.getBoundingClientRect();
     mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -147,7 +153,12 @@ export function createBobber(scene, camera, canvas) {
     const dir = KEY_DIRECTIONS[e.code];
     if (!dir) return;
     held[dir] = true;
-    hasMouse = false; // keyboard takes over until the mouse moves again
+    if (dir === 'left' || dir === 'right') {
+      // Keyboard takes over steering until the mouse moves again. Start from where we are.
+      if (!usingKeys) keyLane = laneOf(position.x, position.z);
+      usingKeys = true;
+      hasMouse = false;
+    }
     e.preventDefault(); // stop arrow keys from scrolling the page
   });
   function releaseAllKeys() {
@@ -185,29 +196,11 @@ export function createBobber(scene, camera, canvas) {
     return target;
   }
 
-  // How far the mouse is from the bobber on the screen.
-  // We "project" the bobber's 3D position onto the screen, which gives coordinates from
-  // -1 to +1 like the mouse. Multiplying X by the aspect ratio makes left/right and
-  // up/down distances count the same. 1.0 = half the screen's height.
-  //
-  // The real camera trails a little behind while it follows, which would make the
-  // bobber drift toward the bottom of the screen when backing up (weaker pull).
-  // So we use a pretend camera that is always exactly where the chase camera WANTS
-  // to be. Then forward and backward feel the same.
-  const onScreen = new THREE.Vector3();
-  const idealCamera = camera.clone();
-  const idealLookAt = new THREE.Vector3();
-  function screenDistance() {
-    idealCamera.aspect = camera.aspect;
-    idealCamera.fov = camera.fov;
-    idealCamera.updateProjectionMatrix();
-    getChaseCameraPose(position, idealCamera.position, idealLookAt, flight.height);
-    idealCamera.lookAt(idealLookAt);
-    idealCamera.updateMatrixWorld();
-    onScreen.set(position.x, flight.height, position.z).project(idealCamera);
-    const dx = (mouse.x - onScreen.x) * camera.aspect;
-    const dy = mouse.y - onScreen.y;
-    return Math.sqrt(dx * dx + dy * dy);
+  // Where across the lake a point is: -1 = left shore, 0 = middle, 1 = right shore.
+  function laneOf(x, z) {
+    const e = getLakeEdges(z);
+    const half = (e.maxX - e.minX) / 2;
+    return (x - (e.minX + half)) / half;
   }
 
   // The speed slider (1–10) scales top speed and acceleration.
@@ -235,8 +228,8 @@ export function createBobber(scene, camera, canvas) {
       flight.flying = true;
       // Steer the up/down speed toward "the speed that gets us to hover height".
       // Far below → climb at full speed. At hover height → speed 0, so it hovers.
-      const wantedVy = THREE.MathUtils.clamp((FLY.hoverHeight - flight.height) * 3, -FLY.climbSpeed, FLY.climbSpeed);
-      flight.vy += (wantedVy - flight.vy) * Math.min(1, 6 * dt);
+      const wantedVy = THREE.MathUtils.clamp((FLY.hoverHeight - flight.height) * 5, -FLY.climbSpeed, FLY.climbSpeed);
+      flight.vy += (wantedVy - flight.vy) * Math.min(1, 10 * dt);
       flight.energy = Math.max(0, flight.energy - FLY.energyDrain * dt);
     } else {
       flight.flying = false;
@@ -270,44 +263,45 @@ export function createBobber(scene, camera, canvas) {
   function update(dt, time) {
     const landingSpeed = updateFlight(dt);
     const factor = speedFactor();
-    const maxSpeed = BOBBER.maxSpeed * factor;
 
     marker.visible = false;
 
-    // Keyboard steering: add up the held keys into a direction.
-    // The camera always looks toward −Z (the finish), so "forward" on screen is −Z.
-    const keyX = (held.right ? 1 : 0) - (held.left ? 1 : 0);
-    const keyZ = (held.back ? 1 : 0) - (held.forward ? 1 : 0);
-    if (controlsEnabled && (keyX !== 0 || keyZ !== 0)) {
-      const push = new THREE.Vector3(keyX, 0, keyZ).normalize(); // diagonal isn't faster
-      velocity.addScaledVector(push, BOBBER.acceleration * factor * dt);
-    } else if (hasMouse && controlsEnabled) {
-      findTarget();
-      marker.visible = true;
-      marker.position.set(target.x, getWaveHeight(target.x, target.z, time) + 0.05, target.z);
-
-      // Steering: the arrow from the bobber to the target, flat on the water.
-      const toTarget = new THREE.Vector3(target.x - position.x, 0, target.z - position.z);
-      const dist = toTarget.length();
-      if (dist > BOBBER.deadZone) {
-        // Farther cursor = stronger pull, up to the full acceleration.
-        // We measure "farther" ON THE SCREEN, not on the water. Because the camera looks
-        // ahead, the water behind the bobber is squeezed into the bottom of the screen;
-        // measuring on the water would make backing up much weaker than going forward.
-        const pull = Math.min(screenDistance() / BOBBER.pullScreenDistance, 1) * BOBBER.acceleration * factor;
-        toTarget.normalize(); // make it length 1 so it's only a direction
-        velocity.addScaledVector(toTarget, pull * dt);
-      }
+    // ----- Forward: cruise down the course by itself -----
+    // The camera looks toward −Z (the finish), so forward is −Z.
+    let wantedSpeed = 0;
+    if (controlsEnabled) {
+      wantedSpeed = RUNNER.cruiseSpeed * factor * (1 + rush);
+      if (held.forward) wantedSpeed *= RUNNER.boost;
+      if (held.back) wantedSpeed *= RUNNER.brake;
     }
+    // "1 − e^(−grip × dt)" = the fraction of the gap to close this frame (smooth at any fps).
+    velocity.z += (-wantedSpeed - velocity.z) * (1 - Math.exp(-RUNNER.forwardGrip * dt));
+    rush = Math.max(0, rush - RUNNER.rushDecay * dt);
 
-    // Water drag: lose a fraction of speed every second, so it glides to a stop.
-    // Math.exp makes this work the same no matter the frame rate.
-    // Some levels have their own drag (icy water is slippery: less drag, longer slides).
-    const drag = getLevel().drag ?? BOBBER.drag;
-    velocity.multiplyScalar(Math.exp(-drag * dt));
-
-    // Never go faster than the top speed.
-    if (velocity.length() > maxSpeed) velocity.setLength(maxSpeed);
+    // ----- Sideways: slide over to line up with the spot you're pointing at -----
+    // Icy levels have less drag, which also makes sideways sliding slippery.
+    const slippery = (getLevel().drag ?? BOBBER.drag) / BOBBER.drag;
+    let targetX = null;
+    const edges = getLakeEdges(position.z - 6);
+    const middle = (edges.minX + edges.maxX) / 2;
+    const half = (edges.maxX - edges.minX) / 2;
+    if (controlsEnabled && usingKeys) {
+      const keyX = (held.right ? 1 : 0) - (held.left ? 1 : 0);
+      keyLane = THREE.MathUtils.clamp(keyLane + keyX * RUNNER.keySteer * dt, -0.9, 0.9);
+      targetX = middle + keyLane * half;
+    } else if (controlsEnabled && hasMouse) {
+      // Raycast: the spot on the water under the pointer. We only use its X (left/right).
+      targetX = THREE.MathUtils.clamp(findTarget().x, edges.minX + r, edges.maxX - r);
+    }
+    let wantedSide = 0;
+    if (targetX !== null) {
+      // Farther away = slide faster (up to sideSpeed); right there = stop.
+      wantedSide = THREE.MathUtils.clamp((targetX - position.x) * RUNNER.sideGain, -RUNNER.sideSpeed, RUNNER.sideSpeed);
+      // A little ring on the water ahead shows the line you're steering to.
+      marker.visible = true;
+      marker.position.set(targetX, getWaveHeight(targetX, position.z - 6, time) + 0.05, position.z - 6);
+    }
+    velocity.x += (wantedSide - velocity.x) * (1 - Math.exp(-RUNNER.sideGrip * slippery * dt));
 
     // Move: new position = old position + velocity × time.
     position.addScaledVector(velocity, dt);
@@ -371,12 +365,13 @@ export function createBobber(scene, camera, canvas) {
       minZ = Math.max(minZ, lake.end + r);
       maxZ = Math.min(maxZ, lake.start - r);
     }
+    // (No bounce at the ends: it would bounce over and over, since it always cruises forward.)
     if (position.z < minZ) {
       position.z = minZ;
-      if (velocity.z < 0) velocity.z = -velocity.z * BOBBER.bounce;
+      if (velocity.z < 0) velocity.z = 0;
     } else if (position.z > maxZ) {
       position.z = maxZ;
-      if (velocity.z > 0) velocity.z = -velocity.z * BOBBER.bounce;
+      if (velocity.z > 0) velocity.z = 0;
     }
   }
 
@@ -393,6 +388,8 @@ export function createBobber(scene, camera, canvas) {
     mesh.scale.setScalar(1); // (a black hole may have shrunk it)
     squash.y = 1;
     squash.speed = 0;
+    rush = 0;
+    keyLane = laneOf(x, z);
   }
 
   // Which way to shoot (a direction of length 1, written into "out").
@@ -416,6 +413,11 @@ export function createBobber(scene, camera, canvas) {
     // When floating on the water, shoot straight out (not into the water right ahead).
     if (flight.height < 0.5) out.y = 0;
     return out.normalize();
+  }
+
+  // Grabbing a coin gives a little burst of extra speed. Keep grabbing and it builds up.
+  function addRush(amount = RUNNER.rushPerCoin) {
+    rush = Math.min(RUNNER.rushMax, rush + amount);
   }
 
   // A quick "boing!" (when grabbing coins and rings): a little springy bounce.
@@ -444,7 +446,8 @@ export function createBobber(scene, camera, canvas) {
 
   return {
     mesh, position, velocity, flight, radius: r,
-    update, reset, setSpeedSetting, setControlsEnabled, setVisible, setFlyButton, getAim, boing,
+    update, reset, setSpeedSetting, setControlsEnabled, setVisible, setFlyButton, getAim, boing, addRush,
+    get rush() { return rush; },
     // Height above the water and whether it's floating (handy for other files).
     get height() { return flight.height; },
     get onWater() { return !flight.falling && flight.height < 0.05; },
