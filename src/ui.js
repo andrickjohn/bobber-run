@@ -11,7 +11,19 @@
 import { formatTime } from './game.js';
 import { DIFFICULTY, SETTINGS_LIMITS } from './config.js';
 import { isTouchDevice } from './device.js';
-import { createTackleBox } from './tacklebox.js';
+
+// Small line icons drawn with SVG (simple shapes described in code, like a mini drawing
+// language), so the buttons look crisp at any size without image files.
+const icon = (path) => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
+const ICONS = {
+  pause: icon('<path d="M9 5v14M15 5v14"/>'),
+  play: icon('<path d="M7 5l12 7-12 7z" fill="currentColor"/>'),
+  restart: icon('<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/>'),
+  soundOn: icon('<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 8.5a5 5 0 0 1 0 7M19.5 6a8.5 8.5 0 0 1 0 12"/>'),
+  soundOff: icon('<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9l5 6M22 9l-5 6"/>'),
+  jump: icon('<path d="M12 19V6M6 11l6-6 6 6"/>'),
+  zap: icon('<path d="M13 3L5 13h6l-1 8 8-10h-6z"/>'),
+};
 
 export function createUI() {
   // ----- Announcing actions to main.js -----
@@ -34,26 +46,26 @@ export function createUI() {
       <div class="brand">Bobber Run<span>by Eliott</span></div>
       <div class="score" id="score"><span id="score-value">0</span><span class="score-label">pts</span></div>
       <div class="combo hidden" id="combo">
-        <div class="combo-top"><span class="combo-fire">🔥</span><span class="combo-mult" id="combo-mult">×1</span>
+        <div class="combo-top"><span class="combo-fire">Combo</span><span class="combo-mult" id="combo-mult">×1</span>
           <span class="combo-count" id="combo-count">0 in a row</span></div>
         <div class="combo-track"><div class="combo-fill" id="combo-fill"></div></div>
       </div>
     </div>
     <div class="panel hud-top">
-      <div class="hud-top-row"><span id="level-name"></span><span class="dot">·</span><span class="clock">⏱ <span id="timer">0:00.0</span></span></div>
+      <div class="hud-top-row"><span id="level-name"></span><span class="dot">·</span><span class="clock"><span id="timer">0:00.0</span></span></div>
       <div class="progress">
-        <span class="progress-end">⚓</span>
+        <span class="progress-end start"></span>
         <div class="progress-track" id="progress-track">
           <div class="progress-fill" id="progress-fill"></div>
           <div class="progress-marker" id="progress-marker"></div>
         </div>
-        <span class="progress-end">🌀</span>
+        <span class="progress-end finish"></span>
       </div>
     </div>
     <div class="panel hud-right">
       <div class="lives" id="lives"></div>
       <div class="ammo" id="ammo"></div>
-      <div class="cooler"><div class="cooler-label">🧊 Cooler</div><canvas id="cooler-canvas"></canvas></div>
+      <div class="cooler"><div class="cooler-label">Cooler</div><canvas id="cooler-canvas"></canvas></div>
     </div>
     <div class="toast hidden" id="toast"></div>`;
   document.body.appendChild(hudLayer);
@@ -127,11 +139,11 @@ export function createUI() {
   buttons.className = 'top-buttons';
   const pauseButton = document.createElement('button');
   pauseButton.className = 'hud-button';
-  pauseButton.innerHTML = '⏸<span class="label"> Pause</span>';
+  pauseButton.innerHTML = ICONS.pause + '<span class="label">Pause</span>';
   pauseButton.title = 'Pause (P or Esc)';
   const restartButton = document.createElement('button');
   restartButton.className = 'hud-button';
-  restartButton.innerHTML = '↻<span class="label"> Restart</span>';
+  restartButton.innerHTML = ICONS.restart + '<span class="label">Restart</span>';
   restartButton.title = 'Restart (R)';
   buttons.append(pauseButton, restartButton);
   hudLayer.appendChild(buttons);
@@ -156,8 +168,8 @@ export function createUI() {
   const touchControls = document.createElement('div');
   touchControls.className = 'touch-controls';
   touchControls.innerHTML = `
-    <button class="touch-btn zap-btn" aria-label="Zap">⚡<span>ZAP</span></button>
-    <button class="touch-btn jump-btn" aria-label="Jump">⤴<span>JUMP</span></button>`;
+    <button class="touch-btn zap-btn" aria-label="Zap">${ICONS.zap}<span>Zap</span></button>
+    <button class="touch-btn jump-btn" aria-label="Jump">${ICONS.jump}<span>Jump</span></button>`;
   document.body.appendChild(touchControls);
   // Each button announces when it's pressed and let go. "Pointer capture" keeps
   // listening to that finger even if it slides off the button a little.
@@ -195,15 +207,7 @@ export function createUI() {
   });
 
   // Puts new HTML in the menu panel and shows it.
-  // The Tackle Box toy on the title screen (only running while the title is showing).
-  let toy = null;
-  function stopToy() {
-    if (toy) toy.stop();
-    toy = null;
-  }
-
   function showMenu(html, className = '') {
-    stopToy();
     menu.className = 'menu ' + className;
     menu.innerHTML = html;
   }
@@ -235,44 +239,40 @@ export function createUI() {
     // levels = the LEVELS list from config.js, for the "jump to a level" buttons.
     // stars = the most stars earned in each world, e.g. [3, 1, 0, 0].
     showTitle(best, settings, levels, stars = []) {
-      const levelButtons = levels
+      // One card per world, with the stars you've earned there.
+      const worldCards = levels
         .map((lvl, i) => {
           const n = stars[i] || 0;
-          return `<button class="choice" data-action="playLevel" data-value="${i}">${i + 1}. ${lvl.name}<small>${'★'.repeat(n)}${'☆'.repeat(3 - n)}</small></button>`;
+          return `<button class="world-card" data-action="playLevel" data-value="${i}">
+            <span class="world-number">${i + 1}</span>
+            <span class="world-name">${lvl.name}</span>
+            <span class="world-stars">${'★'.repeat(n)}<i>${'★'.repeat(3 - n)}</i></span>
+          </button>`;
         })
         .join('');
       const touch = document.body.classList.contains('touch');
       showMenu(
         `<div class="title-head">
-          <div class="logo"><span class="logo-bobber"></span><h1 class="big-title">Bobber Run</h1></div>
-          <div class="big-byline">by Eliott</div>
-        </div>
-        <div class="toy-wrap">
-          <button class="play-button" data-action="play">▶ PLAY</button>
-          <canvas id="tackle-box"></canvas>
-          <div class="toy-label">🎣 <b>Tackle Box Drop</b>: tap to drop, match two to merge!</div>
-        </div>
-        <div class="title-side">
+          <div class="eyebrow">A fishing run by Eliott</div>
+          <h1 class="big-title">Bobber Run</h1>
           <p class="howto">${
             touch
-              ? 'Drag left/right to steer · tap <b>JUMP</b> · tap <b>ZAP</b>'
-              : 'Point left/right to steer · <b>Space</b> to jump · <b>F</b> to zap · <b>↑</b> boost'
-          }<br>Line up with coin trails and scoop them all up, catch fish, ride into the portal!</p>
-          ${touch && window.innerHeight > window.innerWidth ? '<p class="note">📱 Turn your phone sideways for a bigger view</p>' : ''}
-          <div class="level-picker"><span>Or jump to a world:</span><div class="choices">${levelButtons}</div></div>
-          <div class="title-footer">
-            <button class="small-button" data-action="settings">⚙ Settings</button>
-            <span class="difficulty-now">${DIFFICULTY[settings.difficulty].label}</span>
-          </div>
-          <div class="bests">${bestScoresHTML(best)}</div>
+              ? 'Drag left and right to steer · tap <b>Jump</b> · tap <b>Zap</b>'
+              : 'Point left and right to steer · <b>Space</b> jump · <b>F</b> zap · <b>↑</b> boost'
+          }</p>
+        </div>
+        <button class="primary play-button" data-action="play">Play</button>
+        ${touch && window.innerHeight > window.innerWidth ? '<p class="note">Turn your phone sideways for a bigger view</p>' : ''}
+        <div class="section-label">Worlds</div>
+        <div class="world-cards">${worldCards}</div>
+        <div class="title-footer">
+          <button class="small-button" data-action="settings">Settings</button>
+          <span class="difficulty-now">${DIFFICULTY[settings.difficulty].label}</span>
+          <span class="spacer"></span>
+          <div class="bests"><span>Best</span>${bestScoresHTML(best)}</div>
         </div>`,
         'title-menu'
       );
-      toy = createTackleBox(document.getElementById('tackle-box'), {
-        onDrop: () => emit('toyDrop'),
-        onMerge: (tier) => emit('toyMerge', tier),
-      });
-      toy.start();
     },
 
     // note = an extra line at the bottom (used when opened from the pause menu).
@@ -298,7 +298,7 @@ export function createUI() {
           <div class="difficulty-description">${DIFFICULTY[settings.difficulty].description}</div>
         </div>
         ${note ? `<p class="note">${note}</p>` : ''}
-        <div class="menu-buttons"><button class="primary" data-action="back">✓ Done</button></div>`
+        <div class="menu-buttons"><button class="primary" data-action="back">Done</button></div>`
       );
       // Sliders announce their new value while being dragged.
       const speed = document.getElementById('speed-slider');
@@ -317,9 +317,9 @@ export function createUI() {
       showMenu(
         `<h1>Paused</h1>
         <div class="menu-buttons column">
-          <button class="primary" data-action="resume">▶ Resume</button>
-          <button data-action="settings">⚙ Settings</button>
-          <button data-action="quit">⌂ Quit to Title</button>
+          <button class="primary" data-action="resume">Resume</button>
+          <button data-action="settings">Settings</button>
+          <button data-action="quit">Quit to title</button>
         </div>
         <p class="note">Press P or Esc to keep going</p>`
       );
@@ -328,12 +328,12 @@ export function createUI() {
     showGameOver(score, bestCombo, levelName, isNewBest) {
       showMenu(
         `<h1>Game Over</h1>
-        ${isNewBest ? '<div class="new-best">★ New best! ★</div>' : ''}
+        ${isNewBest ? '<div class="new-best">New best!</div>' : ''}
         <p class="big-number">${score} <span>points</span></p>
-        <p>Made it to <b>${levelName}</b> · best combo <b>🔥 ${bestCombo}</b></p>
+        <p>Made it to <b>${levelName}</b> · best combo <b>${bestCombo}</b></p>
         <div class="menu-buttons">
-          <button class="primary" data-action="play">↻ Play Again</button>
-          <button data-action="quit">⌂ Title</button>
+          <button class="primary" data-action="play">Play again</button>
+          <button data-action="quit">Title</button>
         </div>`
       );
     },
@@ -346,8 +346,8 @@ export function createUI() {
         ${this.resultsTable(breakdown)}
         <p>Run total so far: <b>${runTotal}</b></p>
         <div class="menu-buttons">
-          <button class="primary" data-action="continueWarp">🚀 Keep warping to ${nextName}</button>
-          <button data-action="quit">⌂ Title</button>
+          <button class="primary" data-action="continueWarp">Continue to ${nextName}</button>
+          <button data-action="quit">Title</button>
         </div>`
       );
     },
@@ -359,16 +359,15 @@ export function createUI() {
         ${starsHTML(stars)}
         ${this.resultsTable(breakdown)}
         <p class="big-number">${runTotal} <span>points total</span></p>
-        ${isNewBest ? '<div class="new-best">★ New best! ★</div>' : `<div class="note">Best: ${best}</div>`}
+        ${isNewBest ? '<div class="new-best">New best!</div>' : `<div class="note">Best: ${best}</div>`}
         <div class="menu-buttons">
-          <button class="primary" data-action="play">↻ Play Again</button>
-          <button data-action="quit">⌂ Title</button>
+          <button class="primary" data-action="play">Play again</button>
+          <button data-action="quit">Title</button>
         </div>`
       );
     },
 
     hideMenu() {
-      stopToy();
       menu.classList.add('hidden');
     },
 
@@ -390,8 +389,8 @@ export function createUI() {
         <div class="warp-card-points">+${info.points}<span> · run total ${info.runTotal}</span></div>
         <div class="warp-card-next">Next stop: <b>${info.nextName}</b></div>
         <div class="warp-card-buttons">
-          <button data-action="holdWarp">📋 Scores</button>
-          <button data-action="quit">⌂ Title</button>
+          <button data-action="holdWarp">Scores</button>
+          <button data-action="quit">Title</button>
         </div>`;
       warpCard.classList.remove('hidden');
     },
@@ -414,12 +413,12 @@ export function createUI() {
     },
 
     setMuted(muted) {
-      muteButton.textContent = muted ? '🔇 Sound off' : '🔊 Sound on';
+      muteButton.innerHTML = (muted ? ICONS.soundOff : ICONS.soundOn) + `<span class="label">${muted ? 'Sound off' : 'Sound on'}</span>`;
     },
 
     // The pause button's label switches between Pause and Resume.
     setPaused(paused) {
-      pauseButton.innerHTML = paused ? '▶<span class="label"> Resume</span>' : '⏸<span class="label"> Pause</span>';
+      pauseButton.innerHTML = paused ? ICONS.play + '<span class="label">Resume</span>' : ICONS.pause + '<span class="label">Pause</span>';
     },
 
     // Show "left" full bobbers and the rest as faded ones, out of "max".
@@ -441,7 +440,7 @@ export function createUI() {
         ${row(`Rings (${b.ringCount})`, b.rings)}
         ${b.zapCount ? row(`Zapped (${b.zapCount})`, b.zaps) : ''}
         ${row(`Cooler pops (${b.popCount} of ${b.catchCount} caught)`, b.cooler)}
-        ${row('Best combo', '🔥 ' + b.bestCombo)}
+        ${row('Best combo', b.bestCombo)}
         ${row('Finish', b.finish)}
         ${row(`Time bonus (${formatTime(b.seconds)})`, b.timeBonus)}
         ${row(`Lives bonus (${b.livesLeft} left)`, b.livesBonus)}
@@ -453,7 +452,7 @@ export function createUI() {
     setAmmo(left, max) {
       if (left === shownAmmo && max === ammo.childElementCount - 1) return; // only redraw when it changes
       shownAmmo = left;
-      ammo.innerHTML = '<span class="ammo-label">🎯</span>' +
+      ammo.innerHTML = '<span class="ammo-label">Zaps</span>' +
         Array.from({ length: max }, (_, i) => `<span class="zap-dot ${i < left ? '' : 'empty'}"></span>`).join('');
     },
     setScore(value) {
@@ -530,8 +529,8 @@ export function createUI() {
     },
 
     // A first-time tip card. html can use <b> for the important words.
-    showTip(icon, html, seconds) {
-      tip.innerHTML = `<span class="tip-icon">${icon}</span><span>${html}</span>`;
+    showTip(html, seconds) {
+      tip.innerHTML = `<span class="tip-badge">Tip</span><span>${html}</span>`;
       tip.classList.add('show');
       clearTimeout(tipTimer);
       tipTimer = setTimeout(() => tip.classList.remove('show'), seconds * 1000);

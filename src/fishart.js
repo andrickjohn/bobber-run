@@ -1,6 +1,6 @@
 // fishart.js
 // Draws cute flat 2D fish (and bobbers and lures) on a canvas.
-// Used by the Tackle Box toy on the title screen and the cooler in the HUD,
+// Used by the cooler in the HUD,
 // so everything is drawn by code, with no image files.
 //
 // look = { kind: 'fish' | 'bobber' | 'lure', body, belly, stripes, spots, whiskers, golden }

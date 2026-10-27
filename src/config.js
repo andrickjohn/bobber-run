@@ -171,14 +171,6 @@ export const PORTAL = {
   openAt: 0.7,         // the portal opens once you're this far along the course (0.7 = 70%)
 };
 
-// The "Tackle Box Drop" toy on the title screen
-export const TACKLE_BOX = {
-  gravity: 2.4,        // how fast fish fall (in box-heights per second, per second)
-  dropCooldown: 0.45,  // seconds between drops
-  mergePoints: 2,      // points for merging two minnows (each bigger fish doubles it)
-  overflowSeconds: 2.5, // fish above the line this long = the box shakes empty
-};
-
 // The black hole below Space Lakes (fall into a gap and it swallows you!)
 export const BLACK_HOLE = {
   x: 0,                // where it is: under the middle of the course, far below

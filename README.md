@@ -137,9 +137,8 @@ Audio API.
 | `src/combo.js` | The combo counter and multiplier |
 | `src/catchfish.js` | The schools of colorful fish you can catch |
 | `src/cooler.js` | The cooler puzzle: stacking, matching, chains and overflow |
-| `src/fishart.js` | Draws the flat 2D fish, bobbers and lures (title toy and cooler) |
+| `src/fishart.js` | Draws the flat 2D fish in the cooler |
 | `src/style.js` | Thin outlines (and optional toon shading, `STYLE.toon`) |
-| `src/tacklebox.js` | The Tackle Box Drop fish-merging toy on the title screen |
 | `src/obstacles.js` | Every obstacle type and how it moves |
 | `src/coins.js` | Coin trails, Golden Lures and Zap Packs |
 | `src/game.js` | Lives, score, timer, game states, runs through the worlds, collisions |

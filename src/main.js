@@ -24,7 +24,7 @@ import { createShooter } from './shooting.js';
 import { createHyperspace } from './hyperspace.js';
 import { createUI } from './ui.js';
 import { loadSettings, saveSettings, applySettings, loadBestScores, recordScore, loadStars, recordStars, loadTipsSeen, saveTipsSeen } from './settings.js';
-import { playChime, playFanfare, playSplash, playGameOver, playComboDing, playMultiplierUp, playComboBreak, playGoldenDing, setMuted, playJump, playLeap, playPlop, playZap, playPoof, playFall, setAmbientTheme, playReload, setPortalHum, playHyperspace, playBlackHole, playToyDrop, playToyMerge, playCatch, playCoolerPop, playOverflow, playCountBeep, playTip } from './audio.js';
+import { playChime, playFanfare, playSplash, playGameOver, playComboDing, playMultiplierUp, playComboBreak, playGoldenDing, setMuted, playJump, playLeap, playPlop, playZap, playPoof, playFall, setAmbientTheme, playReload, setPortalHum, playHyperspace, playBlackHole, playCatch, playCoolerPop, playOverflow, playCountBeep, playTip } from './audio.js';
 
 const canvas = document.getElementById('game');
 const { renderer, scene, camera, followWithSun, applyTheme } = createScene(canvas);
@@ -180,7 +180,7 @@ function go() {
   playCountBeep(true);
   setTimeout(() => game.state !== 'countdown' && ui.showCountdown(''), 900);
   const touch = document.body.classList.contains('touch');
-  tip('steer', touch ? '👆' : '👉', touch
+  tip('steer', touch
     ? 'You cruise forward by yourself. Drag left and right to <b>line up</b> with the coin trails!'
     : 'You cruise forward by yourself. Point left and right (or use the arrow keys) to <b>line up</b> with the coin trails!');
 }
@@ -192,10 +192,10 @@ const tipsSeen = loadTipsSeen();
 const tipQueue = [];
 
 // Asks for a tip. It waits its turn if another tip is showing. urgent = show it right away.
-function tip(id, icon, html, urgent = false) {
+function tip(id, html, urgent = false) {
   if (tipsSeen.has(id) || tipQueue.some((t) => t.id === id)) return;
-  if (urgent) tipQueue.unshift({ id, icon, html });
-  else tipQueue.push({ id, icon, html });
+  if (urgent) tipQueue.unshift({ id, html });
+  else tipQueue.push({ id, html });
   if (urgent) ui.hideTip();
 }
 
@@ -207,20 +207,20 @@ function updateTips() {
     return dz > 6 && dz < TIPS.jumpLookAhead && Math.abs(c.x - bobber.position.x) < 4;
   })) {
     const touch = document.body.classList.contains('touch');
-    tip('jump', '⤴️', touch ? 'Something ahead! Tap <b>JUMP</b> to hop over it.' : 'Something ahead! Press <b>Space</b> (or click) to hop over it.', true);
+    tip('jump', touch ? 'Something ahead! Tap <b>Jump</b> to hop over it.' : 'Something ahead! Press <b>Space</b> (or click) to hop over it.', true);
   }
   // Catch tip: when a school of little fish is close ahead.
   if (!tipsSeen.has('catch') && catchFish.list.some((f) => {
     const dz = bobber.position.z - f.mesh.position.z;
     return dz > 0 && dz < 35;
   })) {
-    tip('catch', '🐟', 'Bump into the little <b>colored fish</b> to catch them for your cooler.');
+    tip('catch', 'Bump into the little <b>colored fish</b> to catch them for your cooler.');
   }
   if (ui.tipShowing || tipQueue.length === 0) return;
   const next = tipQueue.shift();
   tipsSeen.add(next.id);
   saveTipsSeen(tipsSeen);
-  ui.showTip(next.icon, next.html, TIPS.seconds);
+  ui.showTip(next.html, TIPS.seconds);
   playTip();
 }
 
@@ -447,9 +447,6 @@ ui.on('jumpDown', () => bobber.setJumpButton(true));
 ui.on('zapDown', () => shooter.setButton(true));
 ui.on('zapUp', () => shooter.setButton(false));
 ui.on('mute', toggleMute);
-// The Tackle Box toy on the title screen
-ui.on('toyDrop', playToyDrop);
-ui.on('toyMerge', playToyMerge);
 function toggleMute() {
   settings.muted = !settings.muted;
   setMuted(settings.muted);
@@ -546,7 +543,7 @@ function updateCourse(dt, time) {
     ui.bigPop('RING!', 'ring');
     comboFeedback(result);
     ui.setProgressTicks(course.progressTicks());
-    tip('ring', '⭕', 'Ring gates give <b>big points</b>, a combo boost and a free zap. Some are up in the sky!');
+    tip('ring', 'Ring gates give <b>big points</b>, a combo boost and a free zap.');
   }
   // The portal opens once you're far enough along the course.
   if (game.state === 'playing' && !portalOpen && bobber.position.z < getLevel().finishZ * PORTAL.openAt) {
@@ -554,7 +551,7 @@ function updateCourse(dt, time) {
     world.openPortal();
     playMultiplierUp(6);
     ui.bigPop('PORTAL OPEN!', 'ring');
-    tip('portal', '🌀', 'The <b>portal</b> is open at the end of the course. Ride into it to finish the world!');
+    tip('portal', 'The <b>portal</b> is open at the end of the course. Ride into it to finish the world!');
   }
   // Close to the open portal, it pulls you toward its middle (so you can't miss it).
   const toPortal = bobber.position.z - getLevel().finishZ;
@@ -592,7 +589,7 @@ function updateCoins(dt, time) {
       const result = combo.add(p.golden ? 2 : 1);
       playComboDing(combo.count);
       bobber.addRush(); // each coin gives a little burst of speed
-      tip('combo', '🔥', 'Stay lined up and grab the <b>whole trail</b> for a PERFECT TRAIL bonus. Every 5 coins in a row raises your <b>multiplier</b>!');
+      tip('combo', 'Stay lined up and grab the <b>whole trail</b> for a PERFECT TRAIL bonus. Every 5 coins in a row raises your <b>multiplier</b>!');
       bobber.boing(p.golden ? 1.5 : 0.6);
       if (p.golden) {
         playGoldenDing();
@@ -630,7 +627,7 @@ function catchIntoCooler(color, x, y, z) {
   bobber.boing(1);
   cooler.add(color);
   playCatch();
-  tip('cooler', '🧊', 'Caught one! Line up <b>3 of the same color</b> in your cooler to POP them. Don\'t let it fill up!');
+  tip('cooler', 'Caught one! Line up <b>3 of the same color</b> in your cooler to POP them. Don\'t let it fill up!');
   effects.splash(x, Math.max(0, y - 0.3), z, 0.4);
   effects.sparkle(x, y + 0.5, z);
 }
@@ -788,7 +785,7 @@ function respawn() {
   game.startInvincible();
   snapCamera();
   const touch = document.body.classList.contains('touch');
-  tip('zap', '⚡', touch ? 'Tap <b>ZAP</b> to blast obstacles out of your way.' : 'Press <b>F</b> to zap obstacles out of your way.');
+  tip('zap', touch ? 'Tap <b>Zap</b> to blast obstacles out of your way.' : 'Press <b>F</b> to zap obstacles out of your way.');
 }
 
 // ---------------------------------------------------------------------------

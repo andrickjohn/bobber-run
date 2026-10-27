@@ -654,21 +654,6 @@ export function playBlackHole(seconds) {
   tone(55, seconds + 0.08, 0.6, 'sine', 0.35);
 }
 
-// Tackle Box toy: a soft "plip" when a fish drops in.
-export function playToyDrop() {
-  tone(520, 0, 0.12, 'sine', 0.08);
-}
-
-// Tackle Box toy: two fish merged. Bigger fish = higher, happier notes (going up a scale).
-// tier 7 (two golden fish) gets a little fanfare.
-export function playToyMerge(tier) {
-  const scale = [523, 587, 659, 784, 880, 1047, 1175, 1319, 1568];
-  const f = scale[Math.min(tier, scale.length - 1)];
-  tone(f, 0, 0.25, 'triangle', 0.14);
-  tone(f * 1.5, 0.06, 0.3, 'sine', 0.1);
-  if (tier >= 7) [1047, 1319, 1568, 2093].forEach((n, i) => tone(n, 0.15 + i * 0.09, 0.4, 'triangle', 0.14));
-}
-
 // Caught a fish: a bubbly "blub-blip".
 export function playCatch() {
   tone(400, 0, 0.1, 'sine', 0.12);

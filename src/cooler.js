@@ -154,13 +154,13 @@ export function createCooler(canvas, callbacks = {}) {
     ctx.save();
     if (shake > 0) ctx.translate(Math.sin(performance.now() / 20) * 6 * shake, 0);
 
-    // The cooler: a white box with a thick blue rim.
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    // The cooler: a faint see-through box (it sits on the dark glass HUD panel).
+    ctx.fillStyle = 'rgba(255,255,255,0.07)';
     roundRect(2, 2, width - 4, height - 4, 10);
     ctx.fill();
     // Faint column dividers
-    ctx.strokeStyle = 'rgba(28,126,214,0.15)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
     for (let c = 1; c < COLS; c++) {
       ctx.beginPath();
       ctx.moveTo(pad + cellW() * c, pad);
@@ -169,12 +169,12 @@ export function createCooler(canvas, callbacks = {}) {
     }
     // A red warning glow when it's nearly full
     if (total() >= COLS * ROWS - COLS) {
-      ctx.fillStyle = `rgba(255, 82, 82, ${0.15 + 0.15 * Math.sin(performance.now() / 120)})`;
+      ctx.fillStyle = `rgba(255, 93, 93, ${0.18 + 0.12 * Math.sin(performance.now() / 120)})`;
       roundRect(2, 2, width - 4, height - 4, 10);
       ctx.fill();
     }
-    ctx.strokeStyle = '#1b1b2f';
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = 1;
     roundRect(2, 2, width - 4, height - 4, 10);
     ctx.stroke();
 
