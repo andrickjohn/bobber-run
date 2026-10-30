@@ -1,17 +1,17 @@
 // coins.js
-// Gold coins, Golden Lures and ⚡ Zap Packs on the course. Where they go is decided by
+// The things you collect on the course: each world has its own (gold coins, stars,
+// rubies, ice crystals, pearls, diamonds), plus Golden Lures and ⚡ Zap Packs. Where they go is decided by
 // the course plan (setpieces.js): coins come in trails you can line up with and zoom
 // through. Grab EVERY coin in a trail for a bonus!
 // Coins close to you fly to you by themselves (a "magnet"), so lined up = you get them.
 // This file only reports pickups; game.js adds the points.
 
 import * as THREE from 'three';
-import { COINS, COLORS } from './config.js';
-import { getWaveHeight } from './world.js';
+import { COINS, COLORS, COLLECTIBLES } from './config.js';
+import { getWaveHeight, getTheme } from './world.js';
 import { cartoon } from './style.js';
 
-// Shapes are shared by every coin.
-const coinGeo = new THREE.CylinderGeometry(0.9, 0.9, 0.18, 20);
+// Shapes shared by every Golden Lure.
 const lureBodyGeo = new THREE.SphereGeometry(0.6, 12, 8);
 const lureHookGeo = new THREE.TorusGeometry(0.3, 0.07, 6, 12, Math.PI * 1.4);
 
@@ -26,11 +26,72 @@ function makeCoinMaterial(color) {
   });
 }
 
-function makeCoinModel(material) {
-  const coin = new THREE.Mesh(coinGeo, material);
-  coin.rotation.x = Math.PI / 2; // stand the flat cylinder up on its edge, like a coin
+// ----- Each world's collectible shape (all about the same size) -----
+// A five-pointed star: points around a circle, alternating far out and close in,
+// then given some thickness ("extruded").
+function makeStarGeometry() {
+  const shape = new THREE.Shape();
+  for (let i = 0; i < 10; i++) {
+    const angle = (i / 10) * Math.PI * 2 + Math.PI / 2;
+    const r = i % 2 === 0 ? 1.05 : 0.45;
+    if (i === 0) shape.moveTo(Math.cos(angle) * r, Math.sin(angle) * r);
+    else shape.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+  }
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.25, bevelEnabled: true, bevelSize: 0.08, bevelThickness: 0.08, bevelSegments: 2 });
+  geo.center();
+  return geo;
+}
+// A cut gem: a short wide cone on top (the "crown") and a tall pointy cone below.
+function makeGemGeometry() {
+  const crown = new THREE.CylinderGeometry(0.55, 0.85, 0.35, 8, 1);
+  crown.translate(0, 0.17, 0);
+  const point = new THREE.ConeGeometry(0.85, 1.0, 8, 1);
+  point.rotateX(Math.PI);
+  point.translate(0, -0.5, 0);
+  // Join the two pieces into one shape.
+  const geo = new THREE.BufferGeometry();
+  const a = crown.toNonIndexed();
+  const b = point.toNonIndexed();
+  const positions = new Float32Array([...a.attributes.position.array, ...b.attributes.position.array]);
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+const SHAPES = {
+  coin: () => {
+    const g = new THREE.CylinderGeometry(0.9, 0.9, 0.18, 24);
+    g.rotateX(Math.PI / 2); // stand the flat cylinder up on its edge, like a coin
+    return g;
+  },
+  star: makeStarGeometry,
+  ruby: () => new THREE.OctahedronGeometry(0.85, 0),
+  crystal: () => {
+    const g = new THREE.OctahedronGeometry(0.7, 0);
+    g.scale(0.7, 1.6, 0.7); // a long icy shard
+    return g;
+  },
+  pearl: () => new THREE.SphereGeometry(0.7, 24, 16),
+  diamond: makeGemGeometry,
+};
+// What each collectible looks like: glossy gems are flat-shaded so their faces sparkle.
+function makeCollectibleMaterial(kind) {
+  const color = COLLECTIBLES[kind].color;
+  const gem = kind === 'ruby' || kind === 'crystal' || kind === 'diamond';
+  return new THREE.MeshPhysicalMaterial({
+    color,
+    emissive: color,
+    emissiveIntensity: kind === 'pearl' ? 0.15 : 0.35,
+    metalness: kind === 'coin' || kind === 'star' ? 0.5 : 0.1,
+    roughness: kind === 'pearl' ? 0.25 : 0.15,
+    clearcoat: 1,
+    flatShading: gem,
+    iridescence: kind === 'pearl' ? 1 : 0, // pearls shimmer with rainbow colors
+  });
+}
+
+function makeCoinModel(geometry, material) {
   const group = new THREE.Group();
-  group.add(coin);
+  group.add(new THREE.Mesh(geometry, material));
   return { group, materials: [material] };
 }
 
@@ -67,12 +128,23 @@ function makeZapPackModel() {
 export function createCoins(scene) {
   const coins = [];
 
-  // One shared material for all plain coins (there are a lot of them).
-  const coinMaterial = makeCoinMaterial(COLORS.coin);
+  // One shared shape and material for all the plain collectibles (there are a lot of
+  // them). They change when a world with a different collectible is laid out.
+  let coinGeometry = null;
+  let coinMaterial = null;
+  let collectible = null;
+  function useCollectible(kind) {
+    if (kind === collectible) return;
+    if (coinGeometry) coinGeometry.dispose();
+    if (coinMaterial) coinMaterial.dispose();
+    collectible = kind;
+    coinGeometry = SHAPES[kind]();
+    coinMaterial = makeCollectibleMaterial(kind);
+  }
 
   function addPickup(kind, x, z, airHeight, trail = null) {
     const model =
-      kind === 'golden' ? makeGoldenLureModel() : kind === 'zapPack' ? makeZapPackModel() : makeCoinModel(coinMaterial);
+      kind === 'golden' ? makeGoldenLureModel() : kind === 'zapPack' ? makeZapPackModel() : makeCoinModel(coinGeometry, coinMaterial);
     model.group.position.set(x, 0, z);
     cartoon(model.group, 0.12);
     scene.add(model.group);
@@ -88,6 +160,7 @@ export function createCoins(scene) {
   // pickups = extra things like Zap Packs: { kind, x, z, height }.
   function lay(trails, pickups) {
     clear();
+    useCollectible(getTheme().collectible || 'coin');
     for (const coinsInTrail of trails) {
       // Every coin in a trail shares this, to find out if you got them ALL.
       const trail = { total: 0, got: 0, missed: false };

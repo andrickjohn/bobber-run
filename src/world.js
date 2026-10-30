@@ -233,11 +233,15 @@ export function createWorld(scene) {
     root.add(createTerrain(theme));
     if (theme.mountains) root.add(createMountains(theme));
     root.add(createDock());
-    root.add(createTrees(theme));
+    if (theme.trees === 'palm') root.add(createPalms());
+    else if (theme.trees !== 'none') root.add(createTrees(theme));
     if (theme.reeds !== false) root.add(createReeds());
     root.add(createStartLine());
     if (theme.decor === 'aurora') {
       decor = createAuroraSky();
+      root.add(decor.group);
+    } else if (theme.decor === 'neon') {
+      decor = createNeonCity();
       root.add(decor.group);
     }
   }
@@ -1081,6 +1085,155 @@ function createTrees(theme) {
     group.add(tree);
   }
   return group;
+}
+
+// Palm trees: a curved trunk made of short tilted pieces, with drooping fronds and
+// coconuts on top. Each tree leans a different way.
+function createPalms() {
+  const group = new THREE.Group();
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8a6a48, roughness: 0.9 });
+  const frondMat = new THREE.MeshStandardMaterial({ color: 0x3f8f3a, roughness: 0.7, side: THREE.DoubleSide });
+  const coconutMat = new THREE.MeshStandardMaterial({ color: 0x5a3a20, roughness: 0.6 });
+  const pieceGeo = new THREE.CylinderGeometry(0.32, 0.4, 1.6, 8);
+  // A frond: a long thin leaf shape, drawn flat, then bent down by tilting it.
+  const leaf = new THREE.Shape();
+  leaf.moveTo(0, 0);
+  leaf.quadraticCurveTo(0.9, 2.5, 0, 5.2);
+  leaf.quadraticCurveTo(-0.9, 2.5, 0, 0);
+  const frondGeo = new THREE.ShapeGeometry(leaf, 6);
+  const coconutGeo = new THREE.SphereGeometry(0.3, 10, 8);
+
+  for (let i = 0; i < SHORE.treeCount * 0.6; i++) {
+    const { x, z } = randomSpotNearShore(SHORE.sandWidth - 2, 70);
+    const tree = new THREE.Group();
+    const lean = THREE.MathUtils.randFloat(0.05, 0.14); // how much each piece tilts more than the last
+    // Stack the trunk pieces: each starts at the top of the one before, tilted a bit more.
+    let px = 0;
+    let py = 0;
+    let angle = 0;
+    const pieces = 6;
+    for (let k = 0; k < pieces; k++) {
+      const piece = new THREE.Mesh(pieceGeo, trunkMat);
+      piece.position.set(px + Math.sin(angle) * 0.8, py + Math.cos(angle) * 0.8, 0);
+      piece.rotation.z = -angle;
+      piece.castShadow = true;
+      tree.add(piece);
+      px += Math.sin(angle) * 1.6;
+      py += Math.cos(angle) * 1.6;
+      angle += lean;
+    }
+    // Fronds spread out all around the top, drooping down.
+    const crown = new THREE.Group();
+    crown.position.set(px, py, 0);
+    for (let f = 0; f < 8; f++) {
+      const frond = new THREE.Mesh(frondGeo, frondMat);
+      frond.rotation.order = 'YXZ';
+      frond.rotation.y = (f / 8) * Math.PI * 2;
+      frond.rotation.x = -1.0 - Math.random() * 0.4; // lean outward and down
+      frond.castShadow = true;
+      crown.add(frond);
+    }
+    for (let c = 0; c < 3; c++) {
+      const coconut = new THREE.Mesh(coconutGeo, coconutMat);
+      coconut.position.set(Math.cos(c * 2.1) * 0.4, -0.3, Math.sin(c * 2.1) * 0.4);
+      crown.add(coconut);
+    }
+    tree.add(crown);
+    tree.position.set(x, getTerrainHeight(x, z) - 0.2, z);
+    tree.rotation.y = Math.random() * Math.PI * 2;
+    tree.scale.setScalar(THREE.MathUtils.randFloat(0.9, 1.4));
+    group.add(tree);
+  }
+  return group;
+}
+
+// The window lights on a skyscraper: a small canvas grid of windows, some lit
+// (warm yellow, pink or cyan) and some dark, used as a glowing texture.
+function makeWindowTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 128;
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#0a0818';
+  g.fillRect(0, 0, 64, 128);
+  const colors = ['#ffd88a', '#ff7ad9', '#7df9ff'];
+  for (let y = 4; y < 128; y += 8) {
+    for (let x = 4; x < 64; x += 8) {
+      if (Math.random() < 0.45) {
+        g.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+        g.globalAlpha = 0.5 + Math.random() * 0.5;
+        g.fillRect(x, y, 4, 5);
+      }
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  return texture;
+}
+
+// Neon Canal: rows of dark skyscrapers with glowing windows and neon strips along their
+// tops, on both sides of the canal, plus stars. The strips slowly pulse.
+function createNeonCity() {
+  const group = new THREE.Group();
+  const windows = makeWindowTexture();
+  const neonColors = [0xff3fd0, 0x00f0ff, 0x9d5cff, 0xffd84a];
+  const neonMats = neonColors.map((c) => new THREE.MeshBasicMaterial({ color: c }));
+  const bounds = getWaterBounds();
+  const box = new THREE.BoxGeometry(1, 1, 1);
+  for (const side of [-1, 1]) {
+    for (let z = bounds.maxZ + 60; z > bounds.minZ - 200; z -= THREE.MathUtils.randFloat(14, 26)) {
+      for (let row = 0; row < 3; row++) {
+        const w = THREE.MathUtils.randFloat(10, 20);
+        const h = THREE.MathUtils.randFloat(18, 70) * (1 + row * 0.5);
+        const x = lakeCenterX(z) + side * (laneWidth() / 2 + 28 + row * 32 + Math.random() * 10);
+        // Each building gets its own copy of the window texture, repeated to fit its size.
+        const texture = windows.clone();
+        texture.repeat.set(w / 10, h / 20);
+        texture.needsUpdate = true;
+        const material = new THREE.MeshStandardMaterial({
+          color: 0x1a1530, emissive: 0xffffff, emissiveMap: texture, emissiveIntensity: 0.9, roughness: 0.6,
+        });
+        const building = new THREE.Mesh(box, material);
+        building.scale.set(w, h, w);
+        building.position.set(x, h / 2 - 1, z);
+        group.add(building);
+        // A glowing neon strip around the roof edge
+        const strip = new THREE.Mesh(box, neonMats[Math.floor(Math.random() * neonMats.length)]);
+        strip.scale.set(w + 0.4, 0.5, w + 0.4);
+        strip.position.set(x, h - 0.8, z);
+        group.add(strip);
+      }
+    }
+  }
+  // Glowing strips along both edges of the canal, like city lights on the water's edge.
+  for (const side of [-1, 1]) {
+    for (let z = bounds.maxZ; z > bounds.minZ; z -= 6) {
+      const light = new THREE.Mesh(box, neonMats[side > 0 ? 0 : 1]);
+      light.scale.set(0.3, 0.3, 4);
+      const e = getLakeEdges(z);
+      light.position.set((side > 0 ? e.maxX : e.minX) + side * 3, 0.6, z);
+      group.add(light);
+    }
+  }
+  // Stars
+  const starCount = 600;
+  const starPos = new Float32Array(starCount * 3);
+  for (let i = 0; i < starCount; i++) {
+    const around = Math.random() * Math.PI * 2;
+    const up = Math.acos(Math.random() * 0.9 + 0.1);
+    starPos[i * 3] = 700 * Math.sin(up) * Math.cos(around);
+    starPos[i * 3 + 1] = 700 * Math.cos(up);
+    starPos[i * 3 + 2] = 700 * Math.sin(up) * Math.sin(around) - 200;
+  }
+  const starGeo = new THREE.BufferGeometry();
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+  group.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 1.4, sizeAttenuation: false, fog: false })));
+
+  // The neon colors slowly pulse brighter and dimmer.
+  function update(time) {
+    neonMats.forEach((m, i) => m.color.setHex(neonColors[i]).multiplyScalar(0.75 + 0.25 * Math.sin(time * 2 + i)));
+  }
+  return { group, update };
 }
 
 function createRocks(theme) {

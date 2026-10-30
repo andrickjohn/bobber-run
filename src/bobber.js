@@ -89,6 +89,8 @@ export function createBobber(scene, camera, canvas) {
   let usingKeys = false;
   // "Rush": extra speed from grabbing coins one after another (0 = none).
   let rush = 0;
+  // Endless laps: later laps cruise faster (1 = normal).
+  let lapBoost = 1;
   let controlsEnabled = true; // turned off when the game is over or won
 
   // ----- Mouse and finger -----
@@ -278,7 +280,7 @@ export function createBobber(scene, camera, canvas) {
     if (flight.leaping) {
       wantedSpeed = -velocity.z; // mid-leap: keep the launch speed
     } else if (controlsEnabled) {
-      wantedSpeed = RUNNER.cruiseSpeed * factor * (1 + rush);
+      wantedSpeed = RUNNER.cruiseSpeed * factor * (1 + rush) * lapBoost;
       if (held.forward) wantedSpeed *= RUNNER.boost;
       if (held.back) wantedSpeed *= RUNNER.brake;
     }
@@ -434,6 +436,10 @@ export function createBobber(scene, camera, canvas) {
     return out.normalize();
   }
 
+  function setLapBoost(value) {
+    lapBoost = value;
+  }
+
   // Grabbing a coin gives a little burst of extra speed. Keep grabbing and it builds up.
   function addRush(amount = RUNNER.rushPerCoin) {
     rush = Math.min(RUNNER.rushMax, rush + amount);
@@ -476,7 +482,7 @@ export function createBobber(scene, camera, canvas) {
 
   return {
     mesh, position, velocity, flight, radius: r,
-    update, reset, setSpeedSetting, setControlsEnabled, setVisible, setJumpButton, getAim, boing, addRush, setSkin,
+    update, reset, setSpeedSetting, setControlsEnabled, setVisible, setJumpButton, getAim, boing, addRush, setSkin, setLapBoost,
     get rush() { return rush; },
     // Height above the water and whether it's floating (handy for other files).
     get height() { return flight.height; },

@@ -7,8 +7,11 @@ through glowing ring gates, jump over (or zap!) fishing-themed obstacles, and ri
 swirling portal at the end (it bursts open when you've gone far enough). The music builds
 as your combo grows. The portal shows your score, then blasts you through hyperspace to the next world: **Space Lakes**, where lakes
 float on islands among the stars above a swirling black hole, then **Lava Lagoon**, where cool
-pools sit on volcanic rock above a sea of lava, and finally **Aurora Fjord**, a snowy, slippery
-lake under the northern lights. In the island worlds the bobber leaps from one lake to the next.
+pools sit on volcanic rock above a sea of lava, then **Aurora Fjord**, a snowy, slippery
+lake under the northern lights, **Sunset Reef**, a tropical lagoon at sunset, and **Neon Canal**,
+a glowing city canal at night. In the island worlds the bobber leaps from one lake to the next.
+After the last world it's back to the first for **Lap 2**, faster, and it never ends: how far
+can you get before you run out of lives?
 
 Plays on computers, tablets and phones.
 
@@ -36,12 +39,21 @@ Plays on computers, tablets and phones.
 
 ### Worlds
 
-| World | What's special |
-|---|---|
-| 1. Home Lake | A curvy lake with beaches, pine forests, snowy mountains, frogs and birds, starting from a wooden dock |
-| 2. Space Lakes | Four lakes on floating islands among the stars, above a swirling black hole. Leap from island to island! |
-| 3. Lava Lagoon | Five narrow, twisty pools on volcanic islands above a sea of lava |
-| 4. Aurora Fjord | The curviest lake yet, at night under the northern lights. The water is icy and slippery: the bobber slides much farther, so steer early! |
+| World | What's special | Collect | Surprise! |
+|---|---|---|---|
+| 1. Home Lake | A curvy lake with beaches, pine forests, snowy mountains, frogs and birds, starting from a wooden dock | Gold coins | A giant rubber duck |
+| 2. Space Lakes | Four lakes on floating islands among the stars, above a swirling black hole. Leap from island to island! | Stars | A UFO beaming up a cow |
+| 3. Lava Lagoon | Five narrow, twisty pools on volcanic islands above a sea of lava | Rubies | A fire-breathing dragon |
+| 4. Aurora Fjord | The curviest lake yet, at night under the northern lights. The water is icy and slippery: the bobber slides much farther, so steer early! | Ice crystals | A belly-sliding penguin |
+| 5. Sunset Reef | A tropical lagoon at sunset, lined with palm trees, with purple peaks in the haze | Pearls | A pirate ship firing its cannons |
+| 6. Neon Canal | A narrow canal between glowing skyscrapers at night, with neon lights along the water | Diamonds | A giant disco ball |
+
+Each world's surprise shows up once, out of nowhere, somewhere in the middle. They're harmless:
+just enjoy the show.
+
+**Endless laps:** after Neon Canal, the hyperspace jump takes you back to Home Lake for Lap 2.
+Every lap the bobber cruises 12% faster, obstacles move faster, the harder set-pieces come
+sooner, and the music speeds up. Your score keeps adding up until you run out of lives.
 
 Every world starts with a **3, 2, 1, GO!** countdown while the camera swoops down from the sky.
 Your lives and score carry from one world to the next. Ride into a portal and you go straight
@@ -150,6 +162,7 @@ Audio API.
 | `src/setpieces.js` | Designs each course from set-pieces (and the seeded daily course) |
 | `src/music.js` | The background music: a step sequencer whose layers follow your combo |
 | `src/ghost.js` | Records your runs and replays your best one as a ghost |
+| `src/surprises.js` | Each world's crazy one-off surprise (duck, UFO, dragon, penguin, pirate ship, disco ball) |
 | `src/style.js` | Thin outlines (and optional toon shading, `STYLE.toon`) |
 | `src/obstacles.js` | Every obstacle type and how it moves |
 | `src/coins.js` | Coin trails, Golden Lures and Zap Packs |

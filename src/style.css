@@ -332,7 +332,7 @@ body.title-mode .speed-lines, body.warping .speed-lines { display: none; }
   border-radius: 14px; box-shadow: 0 10px 30px rgba(255, 179, 33, 0.35);
 }
 .section-label { margin: 18px 0 8px; font-size: 11px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--muted); text-align: left; }
-.world-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.world-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .menu .world-card {
   display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left;
   padding: 10px 11px; border-radius: 12px; min-width: 0;
@@ -441,7 +441,9 @@ body.title-mode .touch-controls, body.warping .touch-controls { display: none; }
   .menu.title-menu { width: min(640px, calc(100vw - 32px)); }
   .menu.title-menu .howto, .menu.title-menu .note { display: none; }
   .menu .daily-button { padding: 7px 12px; }
-  .world-cards { grid-template-columns: repeat(4, 1fr); }
+  .world-cards { grid-template-columns: repeat(6, 1fr); }
+  .menu .world-card { padding: 7px 8px; }
+  .world-name { font-size: 12px; }
   .hud-left { top: 6px; left: 6px; padding: 5px 10px 6px; }
   .brand { display: none; }
   .score { font-size: 22px; }

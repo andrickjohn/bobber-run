@@ -2,7 +2,7 @@
 // Everything drawn on top of the 3D view with HTML and CSS:
 //   - the HUD (heads-up display): three panels (score + combo, world + timer + progress,
 //     lives + zaps)
-//   - the menus: title screen, settings, pause, game over and victory
+//   - the menus: title screen, settings, pause, scores and game over
 //   - little pop-up notes ("toasts")
 //
 // Menu buttons don't run game code themselves. They "announce" an action
@@ -381,21 +381,6 @@ export function createUI() {
       );
     },
 
-    // Through the last portal: the whole run is done!
-    showVictory(breakdown, runTotal, isNewBest, best, stars) {
-      showMenu(
-        `<h1>You beat every world!</h1>
-        ${starsHTML(stars)}
-        ${this.resultsTable(breakdown)}
-        <p class="big-number">${runTotal} <span>points total</span></p>
-        ${isNewBest ? '<div class="new-best">New best!</div>' : `<div class="note">Best: ${best}</div>`}
-        <div class="menu-buttons">
-          <button class="primary" data-action="play">Play again</button>
-          <button data-action="quit">Title</button>
-        </div>`
-      );
-    },
-
     hideMenu() {
       menu.classList.add('hidden');
     },
@@ -463,7 +448,7 @@ export function createUI() {
     resultsTable(b) {
       const row = (label, value, cls = '') => `<tr class="${cls}"><td>${label}</td><td>${value}</td></tr>`;
       return `<table>
-        ${row(`Coins (${b.coinCount})`, b.coins)}
+        ${row(`${b.collectibleName || 'Coins'} (${b.coinCount})`, b.coins)}
         ${row(`Golden Lures (${b.goldenCount})`, b.goldenLures)}
         ${row(`Perfect trails (${b.perfectCount})`, b.trails)}
         ${row(`Rings (${b.ringCount})`, b.rings)}

@@ -264,6 +264,23 @@ export const LEVELS = [
     widthWiggle: 14,
     drag: 1.2,      // icy, slippery water: the bobber slides much farther (normal is BOBBER.drag)
   },
+  {
+    name: 'Sunset Reef',
+    theme: 'reef',
+    lakes: [{ start: 40, end: -450 }],
+    finishZ: -420,
+    bend: 16,
+    widthWiggle: 16,
+  },
+  {
+    name: 'Neon Canal',
+    theme: 'neon',
+    lakes: [{ start: 40, end: -450 }],
+    finishZ: -420,
+    width: 58,      // a narrow city canal
+    bend: 6,
+    widthWiggle: 4,
+  },
 ];
 
 // How each kind of level looks. Lake = sunny day on Earth, space = floating islands
@@ -293,6 +310,8 @@ export const THEMES = {
     portalGlow: 0xffd180,
     wildlife: true,    // frogs and birds
     islands: false,    // the lake sits in hills, not floating in space
+    collectible: 'coin', // what you collect in this world (see COLLECTIBLES)
+    surprise: 'duck',  // the crazy surprise that shows up once (see surprises.js)
     fallMessage: 'Splash!',
   },
   space: {
@@ -321,6 +340,8 @@ export const THEMES = {
     wildlife: false,
     islands: true,     // each lake is a floating island with rock underneath
     decor: 'space',    // stars, planets and drifting rocks
+    collectible: 'star',
+    surprise: 'ufo',
     fallMessage: 'Lost in space!',
   },
   lava: {
@@ -350,6 +371,8 @@ export const THEMES = {
     wildlife: false,
     islands: true,
     decor: 'lava',     // lava sea, volcanoes and rising embers
+    collectible: 'ruby',
+    surprise: 'dragon',
     fallMessage: 'Into the lava!',
   },
   ice: {
@@ -380,8 +403,99 @@ export const THEMES = {
     reeds: false,      // too cold for cattails
     snowyTrees: true,  // pines with snow on top
     decor: 'aurora',   // northern lights, stars, moon and falling snow
+    collectible: 'crystal',
+    surprise: 'penguin',
     fallMessage: 'Splash!',
   },
+  reef: {
+    sky: 0xff9a70,
+    skyTop: 0x2c2a72,  // deep purple overhead...
+    skyHorizon: 0xffae78, // ...glowing peach at the horizon: sunset
+    sunGlow: 0xffc070,
+    fog: 0xf0ab88,
+    fogNear: 90,
+    fogFar: 520,
+    sun: 0xffb27a,
+    sunIntensity: 2.5,
+    hemiSky: 0xffc9a8,
+    hemiGround: 0x3f6a5a,
+    hemiIntensity: 0.9,
+    water: 0x0f9fc4,   // clear tropical turquoise
+    wetSand: 0xc9a87a,
+    sand: 0xf5ddb0,
+    grass: 0x5e9a48,
+    grassDark: 0x3c7a3c,
+    rock: 0x8a7a6a,
+    mountains: 0x6a4f80, // purple volcanic peaks in the sunset haze
+    snowcaps: false,
+    trees: 'palm',
+    reeds: false,
+    portal: 0xff5e8a,
+    portalGlow: 0xffd08a,
+    wildlife: false,
+    islands: false,
+    collectible: 'pearl',
+    surprise: 'pirate',
+    fallMessage: 'Splash!',
+  },
+  neon: {
+    sky: 0x12052a,
+    skyTop: 0x04010d,
+    skyHorizon: 0x4a0f6e, // a purple city glow at the horizon
+    sunGlow: 0xff3fd0,
+    fog: 0x1c0734,
+    fogNear: 70,
+    fogFar: 430,
+    sun: 0xa58bff,     // pale city light
+    sunIntensity: 1.3,
+    hemiSky: 0x8a4cff,
+    hemiGround: 0x160a2a,
+    hemiIntensity: 1.1,
+    reflections: 1.0,  // shiny wet streets and water
+    water: 0x101c40,   // dark glossy canal water
+    wetSand: 0x1e1a36,
+    sand: 0x2c2646,    // concrete edges
+    grass: 0x1c1732,   // dark city ground
+    grassDark: 0x130f24,
+    rock: 0x2e2846,
+    trees: 'none',
+    reeds: false,
+    decor: 'neon',     // glowing skyscrapers, neon strips and stars
+    portal: 0x00f0ff,
+    portalGlow: 0xff3fd0,
+    wildlife: false,
+    islands: false,
+    collectible: 'diamond',
+    surprise: 'disco',
+    fallMessage: 'Splash!',
+  },
+};
+
+// What you collect in each world. They all count the same (points, combo, trails);
+// only the look (and the name on the score screen) changes.
+export const COLLECTIBLES = {
+  coin: { name: 'Coins', color: 0xffc107 },
+  star: { name: 'Stars', color: 0xfff176 },
+  ruby: { name: 'Rubies', color: 0xff2a4a },
+  crystal: { name: 'Ice crystals', color: 0x9fe8ff },
+  pearl: { name: 'Pearls', color: 0xfff6ee },
+  diamond: { name: 'Diamonds', color: 0x7df9ff },
+};
+
+// The crazy surprise in each world (see surprises.js)
+export const SURPRISES = {
+  duration: 6,         // seconds each surprise lasts
+  earliest: 0.3,       // it shows up somewhere between 30%...
+  latest: 0.6,         // ...and 60% of the way along the course
+  text: { duck: 'QUACK?!', ufo: 'UFO?!', dragon: 'DRAGON!!', penguin: 'WHEEE!', pirate: 'ARRR!', disco: 'DISCO TIME!' },
+};
+
+// Endless laps: after the last world you warp back to the first, a little faster each time.
+export const ENDLESS = {
+  speedPerLap: 0.12,     // the bobber cruises 12% faster each lap
+  obstacleSpeedPerLap: 0.15, // obstacles move 15% faster each lap
+  musicSpeedPerLap: 0.05, // the music speeds up 5% each lap
+  densityPerLap: 0.3,    // more roaming obstacles each lap
 };
 
 export const OBSTACLES = {
@@ -568,6 +682,16 @@ export const MUSIC = {
     },
     lava: {   // fast and driving, in D (with a spooky lowered 2nd note)
       tempo: 128, root: 50, scale: [0, 1, 3, 5, 7, 8, 10], chords: [0, 0, 5, 6],
+      kick: [0, 4, 8, 12], snare: [4, 12], hats: [2, 6, 10, 14], bass: [0, 2, 4, 6, 8, 10, 12, 14],
+      padWave: 'sawtooth', bassWave: 'sawtooth', leadWave: 'square',
+    },
+    reef: {   // breezy island tune, in D with a laid-back lowered 7th
+      tempo: 104, root: 62, scale: [0, 2, 4, 5, 7, 9, 10], chords: [0, 3, 6, 4],
+      kick: [0, 7, 10], snare: [4, 12], hats: [2, 6, 10, 14], bass: [0, 3, 7, 10, 12],
+      padWave: 'triangle', bassWave: 'sine', leadWave: 'triangle',
+    },
+    neon: {   // synthwave, in A minor, four-on-the-floor
+      tempo: 120, root: 57, scale: MINOR, chords: [0, 5, 3, 4],
       kick: [0, 4, 8, 12], snare: [4, 12], hats: [2, 6, 10, 14], bass: [0, 2, 4, 6, 8, 10, 12, 14],
       padWave: 'sawtooth', bassWave: 'sawtooth', leadWave: 'square',
     },

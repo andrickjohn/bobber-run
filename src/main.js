@@ -7,7 +7,7 @@
 
 import './style.css'; // how the HUD and menus look
 import * as THREE from 'three';
-import { CAMERA, BOBBER, OBSTACLES, EFFECTS, SHOOT, PORTAL, LEVELS, HYPERSPACE, BLACK_HOLE, RINGS, COMBO, INTRO, STARS, TIPS, RUNNER, SKINS } from './config.js';
+import { CAMERA, BOBBER, OBSTACLES, EFFECTS, SHOOT, PORTAL, LEVELS, HYPERSPACE, BLACK_HOLE, RINGS, COMBO, INTRO, STARS, TIPS, RUNNER, SKINS, COLLECTIBLES, ENDLESS, SURPRISES } from './config.js';
 import { createScene, getChaseCameraPose } from './scene.js';
 import { createWorld, lakeCenterX, setLevel, getLevel, getTheme } from './world.js';
 import { createBobber } from './bobber.js';
@@ -21,12 +21,13 @@ import { createCoins } from './coins.js';
 import { createShooter } from './shooting.js';
 import { planCourse, makeRng, dailySeed } from './setpieces.js';
 import { createGhost } from './ghost.js';
+import { createSurprises } from './surprises.js';
 import { createHyperspace } from './hyperspace.js';
 import { createUI } from './ui.js';
-import { setMusicTheme, setMusicIntensity, setMusicDucked } from './music.js';
+import { setMusicTheme, setMusicIntensity, setMusicDucked, setMusicSpeed } from './music.js';
 import { isTouchDevice } from './device.js';
 import { loadSettings, saveSettings, applySettings, loadBestScores, recordScore, loadStars, recordStars, loadTipsSeen, saveTipsSeen, loadDailyBest, recordDailyScore } from './settings.js';
-import { playChime, playFanfare, playSplash, playGameOver, playComboDing, playMultiplierUp, playComboBreak, playGoldenDing, setMuted, playJump, playLeap, playPlop, playZap, playPoof, playFall, setAmbientTheme, playReload, setPortalHum, playHyperspace, playBlackHole, playCountBeep, playTip } from './audio.js';
+import { playChime, playFanfare, playSplash, playGameOver, playComboDing, playMultiplierUp, playComboBreak, playGoldenDing, setMuted, playSurprise, playJump, playLeap, playPlop, playZap, playPoof, playFall, setAmbientTheme, playReload, setPortalHum, playHyperspace, playBlackHole, playCountBeep, playTip } from './audio.js';
 
 const canvas = document.getElementById('game');
 const { renderer, scene, camera, followWithSun, applyTheme } = createScene(canvas);
@@ -35,6 +36,7 @@ const course = createCourse(scene);
 const combo = createCombo();
 const obstacles = createObstacles(scene);
 const effects = createEffects(scene);
+const surprises = createSurprises(scene, effects);
 const coins = createCoins(scene);
 const shooter = createShooter(scene, canvas);
 const hyperspace = createHyperspace();
@@ -68,6 +70,8 @@ let wildlife = null; // frogs and birds (Home Lake only)
 let loadedLevel = -1;
 let livesAtLevelStart = 0; // so Restart can start the level over fairly
 let dailyMode = false;     // playing today's daily course (the same for everyone)
+let lap = 1;               // endless laps: after the last world it's back to the first, faster
+let baseObstacleSpeed = 1; // the difficulty's obstacle speed, before the lap speed-up
 
 function loadLevel(index) {
   if (world) world.dispose();
@@ -76,7 +80,7 @@ function loadLevel(index) {
   applyTheme(getTheme()); // sky, fog and light colors
   world = createWorld(scene);
   wildlife = getTheme().wildlife ? createWildlife(scene) : null;
-  setAmbientTheme(getLevel().theme); // lake sounds or space hum
+  setAmbientTheme(getLevel().theme === 'reef' ? 'lake' : getLevel().theme); // lake sounds, space hum...
   setMusicTheme(getLevel().theme); // each world has its own tune
   loadedLevel = index;
 }
@@ -92,11 +96,12 @@ function setUpCourse() {
   world.closePortal();
   // Design the course from set-pieces (the daily course uses today's date as the seed,
   // so it's the same for everyone; otherwise it's different every time).
-  const seed = dailyMode ? dailySeed(game.levelIndex) : Math.floor(Math.random() * 2 ** 32);
+  const seed = dailyMode ? dailySeed(game.levelIndex) + lap * 1000 : Math.floor(Math.random() * 2 ** 32);
   const plan = planCourse(makeRng(seed), {
-    hard: settings.difficulty === 'hard',
-    density: OBSTACLES.count / OBSTACLES.defaultCount,
+    hard: settings.difficulty === 'hard' || lap > 1, // later laps get the hard set-pieces sooner
+    density: OBSTACLES.count / OBSTACLES.defaultCount + (lap - 1) * ENDLESS.densityPerLap,
   });
+  surprises.start(getTheme().surprise, getLevel().finishZ); // this world's crazy surprise
   course.reset(plan.rings);
   obstacles.place(plan.obstacles);
   coins.lay(plan.trails, plan.pickups);
@@ -111,6 +116,7 @@ function setUpCourse() {
 
 function goToTitle() {
   intro = null;
+  surprises.clear();
   ui.showCountdown('');
   ui.hideTip();
   stopWarp();
@@ -137,9 +143,29 @@ function startGame(levelIndex = 0, daily = false) {
   if (warp) stopWarp(); // (just in case a warp was still going)
   dailyMode = daily;
   applySettings(settings); // difficulty and obstacle count take effect here
+  baseObstacleSpeed = OBSTACLES.speedMultiplier;
+  lap = 1;
+  applyLapSpeed();
   game.newRun(levelIndex);
   beginLevel();
 }
+
+// Endless laps: each lap the bobber cruises faster, obstacles move faster and the
+// music speeds up a little.
+function applyLapSpeed() {
+  const extra = lap - 1;
+  bobber.setLapBoost(1 + ENDLESS.speedPerLap * extra);
+  OBSTACLES.speedMultiplier = baseObstacleSpeed * (1 + ENDLESS.obstacleSpeedPerLap * extra);
+  setMusicSpeed(1 + ENDLESS.musicSpeedPerLap * extra);
+}
+
+// The world's name for the HUD, e.g. "Home Lake", "Neon Canal · Lap 2", "Space Lakes · Daily".
+function levelLabel() {
+  return getLevel().name + (lap > 1 ? ` · Lap ${lap}` : '') + (dailyMode ? ' · Daily' : '');
+}
+
+// The world after this one (after the last world comes the first again).
+const nextLevelIndex = () => (game.levelIndex + 1) % LEVELS.length;
 
 // Start (or restart) the level we're on.
 function beginLevel() {
@@ -148,9 +174,10 @@ function beginLevel() {
   ui.setTitleMode(false);
   ui.hideMenu();
   ui.hideTip();
-  ui.setLevelName(dailyMode ? `${getLevel().name} · Daily` : getLevel().name);
-  ui.showToast(`${dailyMode ? 'Daily course · ' : ''}Level ${game.levelIndex + 1}: ${getLevel().name}`, 2.5);
-  ghost.start(ghostKey()); // your best run on this world, to race against
+  ui.setLevelName(levelLabel());
+  ui.showToast(`${dailyMode ? 'Daily course · ' : ''}${lap > 1 ? `Lap ${lap} · ` : ''}World ${game.levelIndex + 1}: ${getLevel().name}`, 2.5);
+  // Your best run on this world, to race against (only on the first lap: later laps are faster).
+  ghost.start(lap === 1 ? ghostKey() : null);
   startCountdown();
 }
 
@@ -327,7 +354,7 @@ function updateWarp(dt) {
     if (p >= 1) {
       // Arrived! Hand control back to the player.
       stopWarp();
-      ui.showToast(`Level ${game.levelIndex + 1}: ${getLevel().name}`, 2.5);
+      if (lap > 1 && game.levelIndex === 0) ui.bigPop(`LAP ${lap}! FASTER!`, 'milestone');
       go(); // no countdown after hyperspace: you arrive already moving, so just GO!
     }
   }
@@ -353,7 +380,7 @@ function stopWarp() {
 function warpCardInfo() {
   return {
     levelName: getLevel().name,
-    nextName: LEVELS[game.levelIndex + 1].name,
+    nextName: (nextLevelIndex() === 0 ? `Lap ${lap + 1} · ` : '') + LEVELS[nextLevelIndex()].name,
     stars: starsEarned().earned.filter(Boolean).length,
     points: levelResult.total,
     runTotal: game.runTotal,
@@ -365,7 +392,7 @@ function holdWarp() {
   if (!warp || warp.phase !== 'tunnel' || warp.flashed) return;
   warp.held = true;
   ui.hideWarpCard();
-  ui.showLevelComplete(levelResult, game.runTotal, getLevel().name, LEVELS[game.levelIndex + 1].name, starsEarned());
+  ui.showLevelComplete(levelResult, game.runTotal, getLevel().name, LEVELS[nextLevelIndex()].name, starsEarned());
 }
 
 // "Keep warping": back into the tunnel, with a moment left before the flash.
@@ -379,7 +406,12 @@ function continueWarp() {
 // Called while the screen is white: build the next world and put the bobber at its start.
 function arriveInNextLevel() {
   if (!warp) return; // (quit to the title during the flash)
-  game.levelIndex++;
+  game.levelIndex = nextLevelIndex();
+  if (game.levelIndex === 0) {
+    // Back to the first world: a new lap, and everything gets faster.
+    lap++;
+    applyLapSpeed();
+  }
   game.reset(); // new score and timer for this level; lives carry over
   beginLevel();
   game.state = 'warping'; // ...but keep warping until we've slowed down
@@ -419,23 +451,19 @@ function togglePause() {
   }
 }
 
-// Flew through the portal: show this level's score. If there's another level, the
-// button warps you there; after the last level, it's the final victory screen.
+// Flew through the portal: straight into hyperspace to the next world, with this
+// world's score on the way. It never ends: after the last world it's lap 2, faster...
+// until you run out of lives.
 function showLevelComplete() {
   const result = game.finalScore(combo.best);
+  result.collectibleName = COLLECTIBLES[getTheme().collectible].name; // "Coins", "Pearls", ...
   game.runTotal += result.total;
   const stars = starsEarned();
   if (!dailyMode) recordStars(game.levelIndex, stars.earned.filter(Boolean).length);
   const hadGhost = ghost.bestTime !== null;
-  if (ghost.finish(ghostKey(), game.time) && hadGhost) ui.showToast('New best time! Your ghost is saved.', 3);
+  if (lap === 1 && ghost.finish(ghostKey(), game.time) && hadGhost) ui.showToast('New best time! Your ghost is saved.', 3);
   levelResult = result;
-  if (LEVELS[game.levelIndex + 1]) {
-    enterPortal(); // straight into hyperspace: the scores show on the way
-  } else {
-    const isNewBest = dailyMode ? recordDailyScore(game.runTotal) : recordScore(settings.difficulty, game.runTotal);
-    const best = dailyMode ? loadDailyBest() : loadBestScores()[settings.difficulty];
-    ui.showVictory(result, game.runTotal, isNewBest, best, stars);
-  }
+  enterPortal(); // straight into hyperspace: the scores show on the way
 }
 
 // The 3 stars for a world: finish it, get a big combo, and don't lose a life.
@@ -449,7 +477,7 @@ function starsEarned() {
 function showGameOver() {
   const total = game.runScoreSoFar();
   const isNewBest = dailyMode ? recordDailyScore(total) : recordScore(settings.difficulty, total);
-  ui.showGameOver(total, combo.best, getLevel().name, isNewBest);
+  ui.showGameOver(total, combo.best, levelLabel(), isNewBest);
 }
 
 // ----- Menu buttons -----
@@ -915,6 +943,13 @@ function step(dt) {
     playPlop();
   }
   updateShooting(dt, time);
+  // This world's crazy surprise (once per visit, somewhere in the middle)
+  const surprise = surprises.update(dt, bobber, game.state === 'playing');
+  if (surprise) {
+    ui.bigPop(SURPRISES.text[surprise], 'milestone');
+    playSurprise(surprise);
+    buzz([30, 30, 30]);
+  }
   updateCourse(dt, time);
   updateCombo(dt);
   checkForHits();

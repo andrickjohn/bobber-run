@@ -674,3 +674,44 @@ export function playTip() {
   tone(660, 0, 0.12, 'sine', 0.12);
   tone(990, 0.08, 0.18, 'sine', 0.1);
 }
+
+// The surprises each get their own silly sound.
+export function playSurprise(kind) {
+  if (!ctx || ctx.state !== 'running') return;
+  const t = ctx.currentTime;
+  const sweep = (from, to, start, length, type = 'sine', volume = 0.2) => {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(from, t + start);
+    osc.frequency.exponentialRampToValueAtTime(to, t + start + length);
+    g.gain.setValueAtTime(0.0001, t + start);
+    g.gain.exponentialRampToValueAtTime(volume * AUDIO.effectsVolume, t + start + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + start + length);
+    osc.connect(g).connect(master);
+    osc.start(t + start);
+    osc.stop(t + start + length + 0.05);
+  };
+  if (kind === 'duck') {
+    // Squeak squeak!
+    sweep(900, 1400, 0, 0.18, 'square', 0.12);
+    sweep(900, 1500, 0.25, 0.22, 'square', 0.12);
+  } else if (kind === 'ufo') {
+    // Woo-oo-woo: a wobbly science-fiction tone
+    for (let i = 0; i < 6; i++) sweep(500 + (i % 2) * 300, 800 - (i % 2) * 300, i * 0.18, 0.18, 'sine', 0.15);
+  } else if (kind === 'dragon') {
+    // ROAR: a low growl sliding down
+    sweep(220, 60, 0, 1.2, 'sawtooth', 0.25);
+    sweep(160, 45, 0.05, 1.2, 'square', 0.12);
+  } else if (kind === 'penguin') {
+    // Wheee! sliding up
+    sweep(400, 1600, 0, 0.8, 'triangle', 0.18);
+  } else if (kind === 'pirate') {
+    // Arr! then a cannon BOOM
+    sweep(300, 150, 0, 0.5, 'sawtooth', 0.15);
+    sweep(120, 30, 0.6, 0.8, 'sine', 0.5);
+  } else if (kind === 'disco') {
+    // A funky little arpeggio
+    [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => sweep(f, f, i * 0.09, 0.16, 'square', 0.1));
+  }
+}

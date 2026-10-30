@@ -28,6 +28,7 @@ let ducked = false;    // quieter while paused
 let step = 0;          // which 16th-note step we're on
 let nextTime = 0;      // when (in audio time) the next step starts
 let timer = null;
+let speed = 1;         // the tempo multiplier (endless laps speed the music up)
 
 // MIDI note number → frequency. Note 69 is the A above middle C (440 Hz), and every
 // 12 notes up doubles the frequency (one octave), so each note is 2^(1/12) higher.
@@ -115,7 +116,7 @@ const hat = (t, open) => noiseHit(t, 'highpass', 7000, open ? 0.12 : 0.04, open 
 
 // Plays whatever belongs on step "i" (counting 16 steps per bar) at time t.
 function playStep(i, t) {
-  const stepLength = 60 / theme.tempo / 4; // a 16th note, in seconds
+  const stepLength = 60 / (theme.tempo * speed) / 4; // a 16th note, in seconds
   const s = i % 16;
   const bar = Math.floor(i / 16);
   const chord = theme.chords[bar % theme.chords.length]; // the scale degree the chord is built on
@@ -158,7 +159,7 @@ function schedule() {
   if (nextTime < ctx.currentTime) nextTime = ctx.currentTime + 0.05; // (after a pause in the tab)
   while (nextTime < ctx.currentTime + 0.15) {
     playStep(step, nextTime);
-    nextTime += 60 / theme.tempo / 4;
+    nextTime += 60 / (theme.tempo * speed) / 4;
     step = (step + 1) % (16 * theme.chords.length * 4);
   }
 }
@@ -183,7 +184,12 @@ export function setMusicIntensity(level) {
   layers.drums.gain.setTargetAtTime(intensity >= 1 ? 1 : 0, t, 0.3);
   layers.bass.gain.setTargetAtTime(intensity >= 2 ? 1 : 0, t, 0.3);
   layers.lead.gain.setTargetAtTime(intensity >= 3 ? 1 : 0, t, 0.3);
-  leadDelay.delayTime.setValueAtTime((60 / theme.tempo / 4) * 3, t); // the echo follows the beat
+  leadDelay.delayTime.setValueAtTime((60 / (theme.tempo * speed) / 4) * 3, t); // the echo follows the beat
+}
+
+// 1 = the world's normal tempo, 1.1 = 10% faster, ...
+export function setMusicSpeed(value) {
+  speed = value;
 }
 
 // Quieter while paused (or on a menu).
