@@ -4,6 +4,7 @@
 //   sparkle  – little stars bursting outward (coins, ring gates)
 //   confetti – colorful pieces flying up and fluttering down (the finish line)
 //   wake     – foamy puffs left behind the bobber when it moves fast, spreading in a "V"
+//   spray    – droplets flung out sideways when the bobber turns hard
 
 import * as THREE from 'three';
 import { COLORS, EFFECTS } from './config.js';
@@ -16,6 +17,7 @@ const confettiGeo = new THREE.PlaneGeometry(0.35, 0.2);
 const wakeGeo = new THREE.CircleGeometry(0.26, 10);
 
 const WAKE_POOL_SIZE = 64;
+const SPRAY_POOL_SIZE = 90;
 
 export function createEffects(scene) {
   const active = []; // every effect that is still playing
@@ -121,6 +123,49 @@ export function createEffects(scene) {
     }
   }
 
+  // ----- Spray -----
+  // Turning hard flings water out from the outside of the turn (like a speedboat).
+  // A fixed pool of droplets gets reused, just like the wake.
+  const sprayMat = new THREE.MeshBasicMaterial({ color: COLORS.splash, transparent: true, opacity: 0.85 });
+  const sprayPool = [];
+  for (let i = 0; i < SPRAY_POOL_SIZE; i++) {
+    const drop = new THREE.Mesh(dropGeo, sprayMat);
+    drop.visible = false;
+    scene.add(drop);
+    sprayPool.push({ mesh: drop, velocity: new THREE.Vector3(), age: 0 });
+  }
+  let nextDrop = 0;
+  let sprayTimer = 0;
+
+  function updateSpray(dt, bobber, on) {
+    sprayTimer -= dt;
+    const side = bobber.velocity.x;
+    // How hard it's turning: 0 below the threshold, up to 1 when sliding sideways fast.
+    const strength = Math.min(1, Math.max(0, (Math.abs(side) - EFFECTS.sprayMinSide) / 10));
+    if (on && strength > 0 && sprayTimer <= 0) {
+      sprayTimer = 0.012 / strength; // harder turn = more droplets
+      const p = sprayPool[nextDrop];
+      nextDrop = (nextDrop + 1) % SPRAY_POOL_SIZE;
+      const out = -Math.sign(side); // the outside of the turn
+      p.age = 0;
+      p.mesh.visible = true;
+      p.mesh.position.set(bobber.position.x + out * 0.6, 0.3, bobber.position.z + 0.2);
+      p.mesh.scale.setScalar(0.5 + Math.random() * 0.6);
+      p.velocity.set(
+        out * (3 + Math.random() * 4) * strength,
+        3 + Math.random() * 4 * strength,
+        bobber.velocity.z * 0.4 + 2 + Math.random() * 2
+      );
+    }
+    for (const p of sprayPool) {
+      if (!p.mesh.visible) continue;
+      p.age += dt;
+      p.velocity.y -= 22 * dt; // gravity
+      p.mesh.position.addScaledVector(p.velocity, dt);
+      if (p.age > 0.7 || p.mesh.position.y < -0.3) p.mesh.visible = false;
+    }
+  }
+
   // ----- Combo sparkle -----
   // The bigger your combo multiplier, the more sparkles swirl around the bobber.
   // level: 0 = no combo, 1 = maximum multiplier.
@@ -146,6 +191,7 @@ export function createEffects(scene) {
   // ----- Update everything -----
   function update(dt, time, bobber, wakeActive) {
     updateWake(dt, bobber, wakeActive);
+    updateSpray(dt, bobber, wakeActive);
     for (const p of wakePool) {
       if (!p.mesh.visible) continue;
       p.age += dt;

@@ -7,43 +7,45 @@
 
 import './style.css'; // how the HUD and menus look
 import * as THREE from 'three';
-import { CAMERA, BOBBER, OBSTACLES, EFFECTS, SHOOT, PORTAL, LEVELS, HYPERSPACE, BLACK_HOLE, RINGS, COMBO, CATCH, INTRO, STARS, TIPS, RUNNER } from './config.js';
+import { CAMERA, BOBBER, OBSTACLES, EFFECTS, SHOOT, PORTAL, LEVELS, HYPERSPACE, BLACK_HOLE, RINGS, COMBO, INTRO, STARS, TIPS, RUNNER, SKINS } from './config.js';
 import { createScene, getChaseCameraPose } from './scene.js';
 import { createWorld, lakeCenterX, setLevel, getLevel, getTheme } from './world.js';
 import { createBobber } from './bobber.js';
 import { createCourse } from './course.js';
 import { createCombo } from './combo.js';
-import { createCatchFish } from './catchfish.js';
-import { createCooler } from './cooler.js';
 import { createObstacles, setSplashHandler } from './obstacles.js';
 import { createWildlife } from './wildlife.js';
 import { createEffects } from './effects.js';
 import { createGame, bobberHitsAny, formatTime } from './game.js';
 import { createCoins } from './coins.js';
 import { createShooter } from './shooting.js';
+import { planCourse, makeRng, dailySeed } from './setpieces.js';
+import { createGhost } from './ghost.js';
 import { createHyperspace } from './hyperspace.js';
 import { createUI } from './ui.js';
-import { loadSettings, saveSettings, applySettings, loadBestScores, recordScore, loadStars, recordStars, loadTipsSeen, saveTipsSeen } from './settings.js';
-import { playChime, playFanfare, playSplash, playGameOver, playComboDing, playMultiplierUp, playComboBreak, playGoldenDing, setMuted, playJump, playLeap, playPlop, playZap, playPoof, playFall, setAmbientTheme, playReload, setPortalHum, playHyperspace, playBlackHole, playCatch, playCoolerPop, playOverflow, playCountBeep, playTip } from './audio.js';
+import { setMusicTheme, setMusicIntensity, setMusicDucked } from './music.js';
+import { isTouchDevice } from './device.js';
+import { loadSettings, saveSettings, applySettings, loadBestScores, recordScore, loadStars, recordStars, loadTipsSeen, saveTipsSeen, loadDailyBest, recordDailyScore } from './settings.js';
+import { playChime, playFanfare, playSplash, playGameOver, playComboDing, playMultiplierUp, playComboBreak, playGoldenDing, setMuted, playJump, playLeap, playPlop, playZap, playPoof, playFall, setAmbientTheme, playReload, setPortalHum, playHyperspace, playBlackHole, playCountBeep, playTip } from './audio.js';
 
 const canvas = document.getElementById('game');
 const { renderer, scene, camera, followWithSun, applyTheme } = createScene(canvas);
 const bobber = createBobber(scene, camera, canvas);
 const course = createCourse(scene);
 const combo = createCombo();
-const catchFish = createCatchFish(scene);
 const obstacles = createObstacles(scene);
 const effects = createEffects(scene);
 const coins = createCoins(scene);
 const shooter = createShooter(scene, canvas);
 const hyperspace = createHyperspace();
+const ghost = createGhost(scene);
 const game = createGame();
 const ui = createUI();
-const cooler = createCooler(ui.coolerCanvas, { onPop: coolerPopped, onOverflow: coolerOverflowed });
 
 // The player's saved settings (speed, obstacle count, difficulty).
 const settings = loadSettings();
 bobber.setSpeedSetting(settings.speed);
+bobber.setSkin(SKINS.find((k) => k.id === settings.skin));
 setMuted(settings.muted);
 ui.setMuted(settings.muted);
 
@@ -65,6 +67,7 @@ let world = null;
 let wildlife = null; // frogs and birds (Home Lake only)
 let loadedLevel = -1;
 let livesAtLevelStart = 0; // so Restart can start the level over fairly
+let dailyMode = false;     // playing today's daily course (the same for everyone)
 
 function loadLevel(index) {
   if (world) world.dispose();
@@ -74,6 +77,7 @@ function loadLevel(index) {
   world = createWorld(scene);
   wildlife = getTheme().wildlife ? createWildlife(scene) : null;
   setAmbientTheme(getLevel().theme); // lake sounds or space hum
+  setMusicTheme(getLevel().theme); // each world has its own tune
   loadedLevel = index;
 }
 
@@ -84,17 +88,21 @@ function loadLevel(index) {
 // Sets up the course for the current level: new gates, new obstacles, bobber at the start.
 function setUpCourse() {
   if (loadedLevel !== game.levelIndex) loadLevel(game.levelIndex);
-  catchFish.reset(); // new schools of fish to catch
-  cooler.clear();
   portalOpen = false;
   world.closePortal();
-  course.reset(); // new ring gates...
-  obstacles.build(OBSTACLES.count, course.getRingSpots()); // ...and new obstacles around them
+  // Design the course from set-pieces (the daily course uses today's date as the seed,
+  // so it's the same for everyone; otherwise it's different every time).
+  const seed = dailyMode ? dailySeed(game.levelIndex) : Math.floor(Math.random() * 2 ** 32);
+  const plan = planCourse(makeRng(seed), {
+    hard: settings.difficulty === 'hard',
+    density: OBSTACLES.count / OBSTACLES.defaultCount,
+  });
+  course.reset(plan.rings);
+  obstacles.place(plan.obstacles);
+  coins.lay(plan.trails, plan.pickups);
   combo.reset();
   bobber.reset(0, BOBBER.startZ);
   bobber.setVisible(true);
-  coins.clear();
-  coins.setRingSpots(course.getRingSpots()); // some coin trails line up through the rings
   shooter.clear();
   snapCamera();
   resetHUD();
@@ -112,11 +120,22 @@ function goToTitle() {
   game.state = 'title';
   bobber.setControlsEnabled(false);
   ui.setTitleMode(true);
-  ui.showTitle(loadBestScores(), settings, LEVELS, loadStars());
+  showTitleScreen();
+}
+
+// The title screen, with everything it shows: best scores, stars per world, today's
+// daily best, and the bobber skins (unlocked by your total stars).
+function showTitleScreen() {
+  const stars = loadStars();
+  const totalStars = stars.reduce((sum, n) => sum + (n || 0), 0);
+  ui.showTitle(loadBestScores(), settings, LEVELS, stars, { dailyBest: loadDailyBest(), skins: SKINS, totalStars });
 }
 
 // Start a new run. levelIndex lets the title screen start straight at a later level.
-function startGame(levelIndex = 0) {
+// daily = today's daily course (the same for everyone today).
+function startGame(levelIndex = 0, daily = false) {
+  if (warp) stopWarp(); // (just in case a warp was still going)
+  dailyMode = daily;
   applySettings(settings); // difficulty and obstacle count take effect here
   game.newRun(levelIndex);
   beginLevel();
@@ -129,9 +148,15 @@ function beginLevel() {
   ui.setTitleMode(false);
   ui.hideMenu();
   ui.hideTip();
-  ui.setLevelName(getLevel().name);
-  ui.showToast(`Level ${game.levelIndex + 1}: ${getLevel().name}`, 2.5);
+  ui.setLevelName(dailyMode ? `${getLevel().name} · Daily` : getLevel().name);
+  ui.showToast(`${dailyMode ? 'Daily course · ' : ''}Level ${game.levelIndex + 1}: ${getLevel().name}`, 2.5);
+  ghost.start(ghostKey()); // your best run on this world, to race against
   startCountdown();
+}
+
+// Which saved ghost belongs to this world (daily courses get their own, for today).
+function ghostKey() {
+  return dailyMode ? `daily-${dailySeed(game.levelIndex)}` : `world-${game.levelIndex}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -208,13 +233,6 @@ function updateTips() {
   })) {
     const touch = document.body.classList.contains('touch');
     tip('jump', touch ? 'Something ahead! Tap <b>Jump</b> to hop over it.' : 'Something ahead! Press <b>Space</b> (or click) to hop over it.', true);
-  }
-  // Catch tip: when a school of little fish is close ahead.
-  if (!tipsSeen.has('catch') && catchFish.list.some((f) => {
-    const dz = bobber.position.z - f.mesh.position.z;
-    return dz > 0 && dz < 35;
-  })) {
-    tip('catch', 'Bump into the little <b>colored fish</b> to catch them for your cooler.');
   }
   if (ui.tipShowing || tipQueue.length === 0) return;
   const next = tipQueue.shift();
@@ -385,7 +403,7 @@ function showSettingsScreen() {
 
 function closeSettings() {
   if (settingsReturnTo === 'pause') ui.showPause();
-  else ui.showTitle(loadBestScores(), settings, LEVELS, loadStars());
+  else showTitleScreen();
 }
 
 // Pausing only works while racing.
@@ -407,13 +425,16 @@ function showLevelComplete() {
   const result = game.finalScore(combo.best);
   game.runTotal += result.total;
   const stars = starsEarned();
-  recordStars(game.levelIndex, stars.earned.filter(Boolean).length);
+  if (!dailyMode) recordStars(game.levelIndex, stars.earned.filter(Boolean).length);
+  const hadGhost = ghost.bestTime !== null;
+  if (ghost.finish(ghostKey(), game.time) && hadGhost) ui.showToast('New best time! Your ghost is saved.', 3);
   levelResult = result;
   if (LEVELS[game.levelIndex + 1]) {
     enterPortal(); // straight into hyperspace: the scores show on the way
   } else {
-    const isNewBest = recordScore(settings.difficulty, game.runTotal);
-    ui.showVictory(result, game.runTotal, isNewBest, loadBestScores()[settings.difficulty], stars);
+    const isNewBest = dailyMode ? recordDailyScore(game.runTotal) : recordScore(settings.difficulty, game.runTotal);
+    const best = dailyMode ? loadDailyBest() : loadBestScores()[settings.difficulty];
+    ui.showVictory(result, game.runTotal, isNewBest, best, stars);
   }
 }
 
@@ -427,12 +448,23 @@ function starsEarned() {
 
 function showGameOver() {
   const total = game.runScoreSoFar();
-  const isNewBest = recordScore(settings.difficulty, total);
+  const isNewBest = dailyMode ? recordDailyScore(total) : recordScore(settings.difficulty, total);
   ui.showGameOver(total, combo.best, getLevel().name, isNewBest);
 }
 
 // ----- Menu buttons -----
 ui.on('play', () => startGame(0));
+ui.on('daily', () => startGame(0, true));
+// Choosing a bobber skin on the title screen (only ones you've unlocked).
+ui.on('skin', (id) => {
+  const skin = SKINS.find((k) => k.id === id);
+  const totalStars = loadStars().reduce((sum, n) => sum + (n || 0), 0);
+  if (!skin || skin.stars > totalStars) return;
+  settings.skin = id;
+  saveSettings(settings);
+  bobber.setSkin(skin);
+  showTitleScreen();
+});
 ui.on('playLevel', (index) => startGame(Number(index)));
 ui.on('holdWarp', holdWarp);
 ui.on('continueWarp', continueWarp);
@@ -537,6 +569,7 @@ function updateCourse(dt, time) {
     scorePoints(game.addRing(combo.multiplier));
     shooter.addAmmo(RINGS.zaps);
     playChime();
+    buzz(15);
     bobber.boing(1.5);
     shakeTimer = Math.max(shakeTimer, EFFECTS.shakeTime * 0.4);
     effects.sparkle(r.x, r.y, r.z, true);
@@ -575,9 +608,7 @@ function updateCourse(dt, time) {
 // ---------------------------------------------------------------------------
 function updateCoins(dt, time) {
   const playing = game.state === 'playing';
-  // Trails are laid out on the title screen too, as scenery.
-  const canSpawn = playing || game.state === 'title';
-  const picked = coins.update(dt, time, bobber, obstacles.isClear, canSpawn, playing && !game.isRespawning());
+  const picked = coins.update(dt, time, bobber, playing && !game.isRespawning());
   for (const p of picked) {
     effects.sparkle(p.x, p.y, p.z, p.kind !== 'coin');
     if (p.kind === 'zapPack') {
@@ -589,6 +620,7 @@ function updateCoins(dt, time) {
       const result = combo.add(p.golden ? 2 : 1);
       playComboDing(combo.count);
       bobber.addRush(); // each coin gives a little burst of speed
+      fovKick += RUNNER.coinKick;
       tip('combo', 'Stay lined up and grab the <b>whole trail</b> for a PERFECT TRAIL bonus. Every 5 coins in a row raises your <b>multiplier</b>!');
       bobber.boing(p.golden ? 1.5 : 0.6);
       if (p.golden) {
@@ -605,6 +637,7 @@ function updateCoins(dt, time) {
         playMultiplierUp(4);
         bobber.addRush(RUNNER.rushMax); // full speed rush!
         ui.bigPop('PERFECT TRAIL!', 'milestone');
+        buzz([20, 40, 30]);
         effects.sparkle(p.x, p.y, p.z, true);
       }
     }
@@ -612,50 +645,11 @@ function updateCoins(dt, time) {
 }
 
 // ---------------------------------------------------------------------------
-// Catch & stack: caught fish go into the cooler
-// ---------------------------------------------------------------------------
-function updateCatching(dt, time) {
-  const playing = game.state === 'playing';
-  for (const f of catchFish.update(dt, time, bobber, playing && !game.isRespawning())) {
-    catchIntoCooler(f.color, f.x, f.y, f.z);
-  }
-  if (playing) cooler.update(dt);
-}
-
-function catchIntoCooler(color, x, y, z) {
-  game.catchCount++;
-  bobber.boing(1);
-  cooler.add(color);
-  playCatch();
-  tip('cooler', 'Caught one! Line up <b>3 of the same color</b> in your cooler to POP them. Don\'t let it fill up!');
-  effects.splash(x, Math.max(0, y - 0.3), z, 0.4);
-  effects.sparkle(x, y + 0.5, z);
-}
-
-// Three (or more) of a color in a row popped in the cooler.
-function coolerPopped(fishPopped, chain) {
-  const result = combo.add(CATCH.popComboBoost);
-  scorePoints(game.addCoolerPop(fishPopped, chain, combo.multiplier));
-  playCoolerPop(chain);
-  ui.bigPop(chain > 1 ? `CHAIN ×${chain}!` : 'POP!', 'pop');
-  if (chain > 1) shakeTimer = EFFECTS.shakeTime * 0.6;
-  comboFeedback(result);
-}
-
-// The cooler filled to the top with nothing to pop: it dumps, and the combo is lost.
-function coolerOverflowed() {
-  playOverflow();
-  if (combo.break() > 0) playComboBreak();
-  ui.bigPop('COOLER FULL!', 'bad');
-  shakeTimer = EFFECTS.shakeTime;
-}
-
-// ---------------------------------------------------------------------------
 // Zapping
 // ---------------------------------------------------------------------------
-// Zaps can hit obstacles or the little catchable fish.
+// Zaps knock out obstacles.
 const zapTargets = {
-  zap: (x, y, z, r) => obstacles.zap(x, y, z, r) || catchFish.zap(x, y, z, r),
+  zap: (x, y, z, r) => obstacles.zap(x, y, z, r),
 };
 
 function updateShooting(dt, time) {
@@ -663,15 +657,11 @@ function updateShooting(dt, time) {
   const shots = shooter.update(dt, time, bobber, zapTargets, canShoot);
   if (shots.fired) playZap();
   for (const z of shots.zapped) {
-    if (z.type !== 'catch') {
-      // Poof! The obstacle disappears in a burst of sparkles and a splash.
-      effects.sparkle(z.x, z.y + 0.5, z.z, true);
-      effects.splash(z.x, Math.max(0, z.y), z.z, 0.5);
-      playPoof();
-      scorePoints(game.addZap());
-    }
-    // Colored fish (bass, pike, and the little schools) get caught into the cooler.
-    if (z.color !== undefined) catchIntoCooler(z.color, z.x, z.y, z.z);
+    // Poof! The obstacle disappears in a burst of sparkles and a splash.
+    effects.sparkle(z.x, z.y + 0.5, z.z, true);
+    effects.splash(z.x, Math.max(0, z.y), z.z, 0.5);
+    playPoof();
+    scorePoints(game.addZap());
   }
   for (const p of shots.splashes) effects.splash(p.x, p.y, p.z, 0.25); // missed, hit the water
   // Show at least the normal number of dots, more when carrying extra.
@@ -760,6 +750,7 @@ function fellIntoSpace() {
 let lostLifeAtZ = 0;
 
 function loseALife(message) {
+  buzz(90);
   lostLifeAtZ = bobber.position.z;
   // Getting hit breaks your combo.
   if (combo.break() >= COMBO.perStep) playComboBreak();
@@ -805,6 +796,19 @@ function placeCamera(p) {
 // The smooth camera position (without any shake added).
 const cameraBase = new THREE.Vector3();
 let shakeTimer = 0;
+let smoothFov = 60; // the view's width, eased toward its goal (see updateCamera)
+let fovKick = 0;    // a quick extra widening when grabbing a coin
+let cameraRoll = 0; // how far the camera leans into the current turn
+
+// Phones: a short buzz for big moments (if the phone can vibrate). pattern = milliseconds.
+function buzz(pattern) {
+  if (!isTouchDevice || !navigator.vibrate) return;
+  try {
+    navigator.vibrate(pattern);
+  } catch (e) {
+    // Some browsers don't allow it; that's fine.
+  }
+}
 
 function updateCamera(dt) {
   placeCamera(bobber.position);
@@ -816,9 +820,12 @@ function updateCamera(dt) {
   cameraBase.lerp(wantedPosition, t);
   cameraLookAt.lerp(wantedLookAt, t);
   // Rushing (grabbing lots of coins): the view widens a little, so it FEELS faster.
-  const wantedFov = camera.userData.baseFov + bobber.rush * RUNNER.rushFov;
-  if (Math.abs(camera.fov - wantedFov) > 0.01) {
-    camera.fov += (wantedFov - camera.fov) * t;
+  // Each coin also gives the view a tiny "kick" that quickly settles.
+  smoothFov += (camera.userData.baseFov + bobber.rush * RUNNER.rushFov - smoothFov) * t;
+  fovKick *= Math.exp(-10 * dt);
+  const fov = smoothFov + fovKick;
+  if (Math.abs(camera.fov - fov) > 0.01) {
+    camera.fov = fov;
     camera.updateProjectionMatrix();
   }
   camera.position.copy(cameraBase);
@@ -830,6 +837,9 @@ function updateCamera(dt) {
     camera.position.y += (Math.random() - 0.5) * 2 * strength;
   }
   camera.lookAt(cameraLookAt);
+  // Lean into turns: roll the camera a little the way the bobber is sliding.
+  cameraRoll += (-bobber.velocity.x * CAMERA.turnTilt - cameraRoll) * (1 - Math.exp(-5 * dt));
+  camera.rotateZ(cameraRoll);
 }
 
 // Jump the camera straight into place behind the bobber (start, restart, respawn).
@@ -839,6 +849,8 @@ function snapCamera() {
   camera.position.copy(wantedPosition);
   cameraLookAt.copy(wantedLookAt);
   camera.lookAt(cameraLookAt);
+  smoothFov = camera.userData.baseFov;
+  cameraRoll = 0;
 }
 goToTitle(); // the game opens on the title screen
 
@@ -879,7 +891,6 @@ function step(dt) {
   const wakeOn = game.state === 'playing' && !game.isRespawning() && bobber.onWater;
   effects.update(dt, time, bobber, wakeOn);
   updateCoins(dt, time);
-  updateCatching(dt, time);
 
   previousPosition.copy(bobber.position); // remember where we were, to detect crossing lines
   const flightEvent = bobber.update(dt, time);
@@ -889,9 +900,13 @@ function step(dt) {
     return;
   }
   if (flightEvent && flightEvent.fell) fellIntoSpace();
-  if (flightEvent && flightEvent.jumped) playJump();
+  if (flightEvent && flightEvent.jumped) {
+    playJump();
+    buzz(12);
+  }
   if (flightEvent && flightEvent.leaped) {
     playLeap();
+    buzz(30);
     ui.bigPop('BIG LEAP!', 'ring');
   }
   if (flightEvent && flightEvent.landed && game.state === 'playing') {
@@ -908,10 +923,21 @@ function step(dt) {
   if (!game.timerRunning && bobber.position.z < BOBBER.startZ - 1) game.timerRunning = true;
   if (game.update(dt)) respawn(); // true when the respawn wait just finished
   ui.setTimer(formatTime(game.time));
+  // The ghost: record this run, and play back your best one alongside.
+  if (game.state === 'playing' && game.timerRunning) {
+    ghost.update(game.time, bobber, true);
+    if (ghost.bestTime !== null) tip('ghost', 'That glowing bobber is your <b>ghost</b>: your best run on this world. Beat it!');
+  } else if (game.state !== 'playing') {
+    ghost.hide();
+  }
   ui.setProgress(bobber.position.z / getLevel().finishZ);
   if (game.state === 'playing' && !game.isRespawning()) bobber.setVisible(game.blinkVisible());
 
   updateTips();
+  // Speed lines: while rushing, boosting fast or leaping across a gap.
+  const forward = -bobber.velocity.z;
+  const fast = game.state === 'playing' ? Math.max(bobber.rush / RUNNER.rushMax, bobber.flight.leaping ? 1 : 0, (forward - 19) / 10) : 0;
+  ui.updateSpeedLines(THREE.MathUtils.clamp(fast, 0, 1), dt);
   if (game.state === 'countdown') updateCountdown(dt);
   else updateCamera(dt);
   followWithSun(bobber.position);
@@ -927,6 +953,12 @@ function loop(now = performance.now()) {
   // Portal hum: fades in over the last 80 units before the portal.
   const toPortal = Math.abs(bobber.position.z - getLevel().finishZ);
   setPortalHum(game.state === 'playing' ? Math.max(0, 1 - toPortal / 80) : 0);
+  // Music: more layers the bigger your combo (full blast in hyperspace), quieter on menus.
+  let musicLevel = 0;
+  if (game.state === 'playing' && combo.count > 0) musicLevel = combo.multiplier - 1;
+  else if (game.state === 'warping') musicLevel = 3;
+  setMusicIntensity(musicLevel);
+  setMusicDucked(game.state === 'paused' || game.state === 'gameover' || game.state === 'won' || (warp !== null && warp.held));
   renderer.render(scene, camera);
   // Hyperspace streaks are drawn on top of the game (clearing only the depth, so the
   // game picture stays and the streaks appear in front of it).

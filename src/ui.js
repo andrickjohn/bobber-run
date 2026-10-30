@@ -1,7 +1,7 @@
 // ui.js
 // Everything drawn on top of the 3D view with HTML and CSS:
 //   - the HUD (heads-up display): three panels (score + combo, world + timer + progress,
-//     lives + zaps + cooler)
+//     lives + zaps)
 //   - the menus: title screen, settings, pause, game over and victory
 //   - little pop-up notes ("toasts")
 //
@@ -25,6 +25,9 @@ const ICONS = {
   zap: icon('<path d="M13 3L5 13h6l-1 8 8-10h-6z"/>'),
 };
 
+// A color number like 0xe53935 → the CSS text "#e53935".
+const cssColor = (n) => '#' + n.toString(16).padStart(6, '0');
+
 export function createUI() {
   // ----- Announcing actions to main.js -----
   const listeners = {};
@@ -38,7 +41,7 @@ export function createUI() {
   // ----- The in-game HUD: three tidy panels in one layer -----
   //   left:   the game's name, your score and the combo meter
   //   top:    world name, timer and the progress bar to the portal
-  //   right:  lives, zaps and the cooler
+  //   right:  lives and zaps
   const hudLayer = document.createElement('div');
   hudLayer.className = 'hud-layer';
   hudLayer.innerHTML = `
@@ -65,13 +68,11 @@ export function createUI() {
     <div class="panel hud-right">
       <div class="lives" id="lives"></div>
       <div class="ammo" id="ammo"></div>
-      <div class="cooler"><div class="cooler-label">Cooler</div><canvas id="cooler-canvas"></canvas></div>
     </div>
     <div class="toast hidden" id="toast"></div>`;
   document.body.appendChild(hudLayer);
   const score = hudLayer.querySelector('#score');
   const comboBox = hudLayer.querySelector('#combo');
-  const coolerBox = hudLayer.querySelector('.cooler');
   const lives = hudLayer.querySelector('#lives');
   const ammo = hudLayer.querySelector('#ammo');
   const toast = hudLayer.querySelector('#toast');
@@ -83,6 +84,16 @@ export function createUI() {
   const vignette = document.createElement('div');
   vignette.className = 'vignette';
   document.body.appendChild(vignette);
+
+  // Speed lines: thin streaks rushing outward at the edges of the screen when you're
+  // going fast. Drawn on a see-through 2D canvas on top of the 3D view.
+  const speedCanvas = document.createElement('canvas');
+  speedCanvas.className = 'speed-lines';
+  document.body.appendChild(speedCanvas);
+  const speedCtx = speedCanvas.getContext('2d');
+  // Each streak has an angle around the middle of the screen and how far out it is (0..1).
+  const streaks = Array.from({ length: 46 }, () => ({ angle: Math.random() * Math.PI * 2, along: Math.random() }));
+  let speedShown = 0;
 
   // The big "3, 2, 1, GO!" numbers at the start of a level.
   const countdown = document.createElement('div');
@@ -229,7 +240,6 @@ export function createUI() {
 
   return {
     on,
-    coolerCanvas: coolerBox.querySelector('canvas'),
 
     // On the title screen the in-game HUD is hidden.
     setTitleMode(on) {
@@ -238,7 +248,20 @@ export function createUI() {
 
     // levels = the LEVELS list from config.js, for the "jump to a level" buttons.
     // stars = the most stars earned in each world, e.g. [3, 1, 0, 0].
-    showTitle(best, settings, levels, stars = []) {
+    // extra = { dailyBest, skins, totalStars }
+    showTitle(best, settings, levels, stars = [], extra = { dailyBest: 0, skins: [], totalStars: 0 }) {
+      // Bobber skins: unlocked ones can be picked; locked ones show how many stars they need.
+      const skinButtons = extra.skins
+        .map((k) => {
+          const locked = k.stars > extra.totalStars;
+          const swatch = `background: linear-gradient(${cssColor(k.top)} 50%, ${cssColor(k.bottom)} 50%)`;
+          return `<button class="skin ${k.id === settings.skin ? 'selected' : ''} ${locked ? 'locked' : ''}"
+            data-action="skin" data-value="${k.id}" title="${locked ? `${k.stars} stars to unlock` : k.name}">
+            <span class="skin-ball" style="${swatch}"></span>
+            <span class="skin-name">${locked ? `★ ${k.stars}` : k.name}</span>
+          </button>`;
+        })
+        .join('');
       // One card per world, with the stars you've earned there.
       const worldCards = levels
         .map((lvl, i) => {
@@ -262,9 +285,15 @@ export function createUI() {
           }</p>
         </div>
         <button class="primary play-button" data-action="play">Play</button>
+        <button class="daily-button" data-action="daily">
+          <span><b>Daily course</b> · the same course for everyone today</span>
+          <span class="daily-best">${extra.dailyBest ? `Best ${extra.dailyBest}` : 'Not played yet'}</span>
+        </button>
         ${touch && window.innerHeight > window.innerWidth ? '<p class="note">Turn your phone sideways for a bigger view</p>' : ''}
         <div class="section-label">Worlds</div>
         <div class="world-cards">${worldCards}</div>
+        <div class="section-label">Bobber <span class="label-note">· ${extra.totalStars} of ${levels.length * 3} stars</span></div>
+        <div class="skins">${skinButtons}</div>
         <div class="title-footer">
           <button class="small-button" data-action="settings">Settings</button>
           <span class="difficulty-now">${DIFFICULTY[settings.difficulty].label}</span>
@@ -439,7 +468,6 @@ export function createUI() {
         ${row(`Perfect trails (${b.perfectCount})`, b.trails)}
         ${row(`Rings (${b.ringCount})`, b.rings)}
         ${b.zapCount ? row(`Zapped (${b.zapCount})`, b.zaps) : ''}
-        ${row(`Cooler pops (${b.popCount} of ${b.catchCount} caught)`, b.cooler)}
         ${row('Best combo', b.bestCombo)}
         ${row('Finish', b.finish)}
         ${row(`Time bonus (${formatTime(b.seconds)})`, b.timeBonus)}
@@ -518,6 +546,46 @@ export function createUI() {
       pops.appendChild(pop);
       setTimeout(() => pop.remove(), 1100);
     },
+    // amount: 0 = no speed lines, 1 = full speed. dt = seconds since last frame.
+    updateSpeedLines(amount, dt) {
+      speedShown += (amount - speedShown) * Math.min(1, dt * 6); // fade in and out smoothly
+      if (speedShown < 0.02) {
+        if (speedCanvas.dataset.on) speedCtx.clearRect(0, 0, speedCanvas.width, speedCanvas.height);
+        delete speedCanvas.dataset.on;
+        return;
+      }
+      speedCanvas.dataset.on = '1';
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      if (speedCanvas.width !== w || speedCanvas.height !== h) {
+        speedCanvas.width = w;
+        speedCanvas.height = h;
+      }
+      speedCtx.clearRect(0, 0, w, h);
+      const cx = w / 2;
+      const cy = h * 0.45;
+      const reach = Math.hypot(w, h) / 2; // from the middle to a corner
+      speedCtx.lineCap = 'round';
+      for (const s of streaks) {
+        s.along += dt * (1.2 + speedShown * 2.5); // streaks fly outward
+        if (s.along > 1) {
+          s.along -= 1;
+          s.angle = Math.random() * Math.PI * 2;
+        }
+        // Only the outer part of the screen gets streaks (the middle stays clear).
+        const r1 = reach * (0.5 + s.along * 0.5);
+        const r2 = r1 + reach * 0.12 * speedShown;
+        const dx = Math.cos(s.angle);
+        const dy = Math.sin(s.angle);
+        speedCtx.strokeStyle = `rgba(255,255,255,${0.35 * speedShown * (1 - s.along * 0.5)})`;
+        speedCtx.lineWidth = 1.5 + speedShown;
+        speedCtx.beginPath();
+        speedCtx.moveTo(cx + dx * r1, cy + dy * r1);
+        speedCtx.lineTo(cx + dx * r2, cy + dy * r2);
+        speedCtx.stroke();
+      }
+    },
+
     // One number of the countdown ("3", "2", "1" or "GO!"). Empty text hides it.
     showCountdown(text) {
       countdown.classList.toggle('hidden', !text);

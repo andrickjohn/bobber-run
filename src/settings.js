@@ -7,12 +7,13 @@
 // read and write is wrapped in try/catch. If it fails, the game still works; it just
 // won't remember anything.
 
-import { BOBBER, OBSTACLES, COINS, COMBO, GAME, SCORING, DIFFICULTY, SETTINGS_LIMITS } from './config.js';
+import { BOBBER, OBSTACLES, COINS, COMBO, GAME, SCORING, DIFFICULTY, SETTINGS_LIMITS, SKINS } from './config.js';
 
 const SETTINGS_KEY = 'bobberRun.settings';
 const BEST_KEY = 'bobberRun.bestScores';
 const STARS_KEY = 'bobberRun.stars';
 const TIPS_KEY = 'bobberRun.tipsSeen';
+const DAILY_KEY = 'bobberRun.dailyBest';
 
 // The settings a brand-new player starts with (taken from config.js).
 function defaultSettings() {
@@ -21,6 +22,7 @@ function defaultSettings() {
     obstacles: OBSTACLES.count,
     difficulty: SCORING.difficulty,
     muted: false,
+    skin: 'classic',
   };
 }
 
@@ -40,6 +42,7 @@ export function loadSettings() {
     settings.obstacles = clamp(saved.obstacles, L.obstaclesMin, L.obstaclesMax, settings.obstacles);
     if (DIFFICULTY[saved.difficulty]) settings.difficulty = saved.difficulty;
     settings.muted = saved.muted === true;
+    if (SKINS.some((k) => k.id === saved.skin)) settings.skin = saved.skin;
   } catch (e) {
     // Nothing saved, or storage blocked: use the defaults.
   }
@@ -101,6 +104,29 @@ export function recordStars(levelIndex, stars) {
   } catch (e) {
     // Storage blocked: just won't be remembered.
   }
+}
+
+// The best score on today's daily course: { date: 'YYYY-MM-DD', score }.
+// (A best from an earlier day doesn't count any more: every day is a new course.)
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+export function loadDailyBest() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DAILY_KEY) || '{}');
+    return saved.date === today() && Number.isFinite(saved.score) ? saved.score : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+export function recordDailyScore(score) {
+  if (score <= loadDailyBest()) return false;
+  try {
+    localStorage.setItem(DAILY_KEY, JSON.stringify({ date: today(), score }));
+  } catch (e) {
+    // Storage blocked.
+  }
+  return true;
 }
 
 // Which first-time tips have already been shown (so each one only shows once).

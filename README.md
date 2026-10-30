@@ -4,9 +4,8 @@
 
 Steer a fishing bobber down a lake, scoop up trails of coins to build huge combos, float
 through glowing ring gates, jump over (or zap!) fishing-themed obstacles, and ride into the
-swirling portal at the end (it bursts open when you've gone far enough). Catch colorful fish
-and stack them in your cooler: three of a color pop! The portal shows your
-score, then blasts you through hyperspace to the next world: **Space Lakes**, where lakes
+swirling portal at the end (it bursts open when you've gone far enough). The music builds
+as your combo grows. The portal shows your score, then blasts you through hyperspace to the next world: **Space Lakes**, where lakes
 float on islands among the stars above a swirling black hole, then **Lava Lagoon**, where cool
 pools sit on volcanic rock above a sea of lava, and finally **Aurora Fjord**, a snowy, slippery
 lake under the northern lights. In the island worlds the bobber leaps from one lake to the next.
@@ -27,8 +26,8 @@ Plays on computers, tablets and phones.
 | **M** | Sound button | Sound on/off |
 
 - **It's like a runner game:** the bobber always cruises forward on the water. You steer left and right, and jump over things in your way.
-- **Coins come in trails** that run straight down the course: straight lines, smooth lane changes, and gentle curves. Some line up right through a ring gate, and over the gaps between lakes they follow the arc of your big leap. Coins close to you fly to you by themselves, so if you're lined up you'll get them. Grab **every coin in a trail** for a **PERFECT TRAIL** bonus! Each coin also gives you a little burst of speed. Every coin in a row builds your 🔥 **combo**: every 5 in a row raises the multiplier (×2, ×3 … ×10), and each coin's "ding" is a little higher than the last. Wait too long between coins, or get hit, and the combo breaks.
-- **Catch & stack:** colorful little fish swim in schools; bump into them (or zap them, or zap a bass or pike) to **catch** them. Caught fish drop into the **cooler** on the side of the screen. **Three of a color in a row** (up/down or across) **pop** for big points, and fish falling into the gaps can set off **chains**. Fill the cooler with nothing to pop and it overflows: you lose your combo!
+- **Every course is built from designed set-pieces**: straight runs, lane changes, curves, a log to hop with a coin arc over it, a slalom, a lane change that ends through a ring gate, a fish crossing your trail, a swinging lure to time, and a zigzag gauntlet of logs just before the portal. Harder pieces unlock the further you get. Over the gaps between lakes, coins follow the arc of your big leap.
+- **Coins come in trails** you can line up with. Coins close to you fly to you by themselves, so if you're lined up you'll get them. Grab **every coin in a trail** for a **PERFECT TRAIL** bonus! Each coin also gives you a little burst of speed. Every coin in a row builds your 🔥 **combo**: every 5 in a row raises the multiplier (×2, ×3 … ×10), and each coin's "ding" is a little higher than the last. Wait too long between coins, or get hit, and the combo breaks.
 - **Ring gates** are optional glowing gold hoops on the water. Go through one for points (times your combo), a combo boost and a free zap.
 - Getting hit by a fish, turtle, lure or log costs a life and your combo. You come back a little behind where it happened and blink for a moment (safe).
 - **Jump** to hop over logs and fish, then you're straight back down scooping coins. In worlds with gaps between the lakes (Space Lakes, Lava Lagoon), the bobber takes a **BIG LEAP** across by itself when it reaches the end of a lake. The open portal pulls you toward its middle, so you can't miss it.
@@ -51,13 +50,27 @@ little card shows your stars and points, then you burst out into the next world 
 Press **Scores** on the card to stop and see the full breakdown. You can also jump straight
 to a world from the title screen.
 
-### Stars
+### Stars, skins, ghosts and the daily course
 
 Each world has 3 stars to earn: ★ reach the portal, ★ get a 20+ combo, ★ don't lose a life.
-Your best stars for each world are saved and shown on the title screen.
+Your best stars for each world are saved and shown on the title screen. Stars unlock new
+**bobber skins** (Ocean, Lime, Gold, Neon and Galaxy), picked on the title screen.
 
-The first time something new comes up (steering, combos, catching fish, the cooler, ring
-gates, jumping, zapping, the portal), a little tip card explains it. Each tip only
+Finish a world faster than ever before and your run is saved as a **ghost**: a glowing
+see-through bobber that races alongside you next time.
+
+The **Daily course** is a fresh set of courses every day, the same for everyone (it's built
+from today's date), with its own best score and its own ghosts.
+
+### Music and feel
+
+The background music is made in code and reacts to your combo: soft chords at first, then
+drums at ×2, bass at ×3 and a melody at ×4 and up. Lose your combo and it calms back down.
+Each world has its own key, speed and instruments. Going fast shows speed lines, the camera
+leans into turns, water sprays off the bobber in hard turns, and phones buzz on big moments.
+
+The first time something new comes up (steering, combos, ring gates, jumping, zapping,
+your ghost, the portal), a little tip card explains it. Each tip only
 ever shows once.
 
 ### Obstacles
@@ -80,7 +93,6 @@ ever shows once.
 | Perfect trail (every coin in a trail) | +100 × combo multiplier |
 | Golden Lure (ends some trails) | +50 × combo multiplier |
 | Ring gate | +50 × combo multiplier |
-| Each fish popped in the cooler | +30 × chain number × combo multiplier |
 | Finish | +500 |
 | Time bonus | max(0, 300 − seconds) × 2 |
 | Each life left at the finish | +100 |
@@ -135,9 +147,9 @@ Audio API.
 | `src/device.js` | Detects phones/tablets (for touch buttons and lighter graphics) |
 | `src/course.js` | Ring gates, the finish portal, and where you respawn |
 | `src/combo.js` | The combo counter and multiplier |
-| `src/catchfish.js` | The schools of colorful fish you can catch |
-| `src/cooler.js` | The cooler puzzle: stacking, matching, chains and overflow |
-| `src/fishart.js` | Draws the flat 2D fish in the cooler |
+| `src/setpieces.js` | Designs each course from set-pieces (and the seeded daily course) |
+| `src/music.js` | The background music: a step sequencer whose layers follow your combo |
+| `src/ghost.js` | Records your runs and replays your best one as a ghost |
 | `src/style.js` | Thin outlines (and optional toon shading, `STYLE.toon`) |
 | `src/obstacles.js` | Every obstacle type and how it moves |
 | `src/coins.js` | Coin trails, Golden Lures and Zap Packs |

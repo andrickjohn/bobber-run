@@ -20,26 +20,34 @@ export function createBobber(scene, camera, canvas) {
 
   // Top half (red) and bottom half (white). thetaLength = how much of the sphere
   // to draw from the top down: PI/2 is exactly half.
+  // Glossy plastic: "clearcoat" adds a shiny varnish layer on top, like a real bobber.
+  const plastic = (color) => new THREE.MeshPhysicalMaterial({ color, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.08 });
   const top = new THREE.Mesh(
-    new THREE.SphereGeometry(r, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: COLORS.bobberTop, roughness: 0.4 })
+    new THREE.SphereGeometry(r, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2),
+    plastic(COLORS.bobberTop)
   );
   const bottom = new THREE.Mesh(
-    new THREE.SphereGeometry(r, 16, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: COLORS.bobberBottom, roughness: 0.4 })
+    new THREE.SphereGeometry(r, 40, 20, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
+    plastic(COLORS.bobberBottom)
   );
+  // A thin dark band around the middle where the two halves meet
+  const band = new THREE.Mesh(
+    new THREE.TorusGeometry(r * 1.005, 0.045, 8, 48),
+    new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 })
+  );
+  band.rotation.x = Math.PI / 2;
   // The thin stick poking out of the top, with a yellow tip
   const stick = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.06, 0.06, 1.0, 6),
+    new THREE.CylinderGeometry(0.05, 0.07, 1.0, 12),
     new THREE.MeshStandardMaterial({ color: 0xffffff })
   );
   stick.position.y = r + 0.4;
   const tip = new THREE.Mesh(
-    new THREE.SphereGeometry(0.1, 8, 6),
+    new THREE.SphereGeometry(0.1, 16, 12),
     new THREE.MeshStandardMaterial({ color: COLORS.bobberStick })
   );
   tip.position.y = r + 0.9;
-  for (const part of [top, bottom, stick, tip]) {
+  for (const part of [top, bottom, band, stick, tip]) {
     part.castShadow = true;
     mesh.add(part);
   }
@@ -436,6 +444,17 @@ export function createBobber(scene, camera, canvas) {
     squash.speed += 6 * amount;
   }
 
+  // Changes the bobber's look (see SKINS in config.js).
+  function setSkin(skin) {
+    for (const [part, color] of [[top, skin.top], [bottom, skin.bottom]]) {
+      part.material.color.set(color);
+      part.material.metalness = skin.metal;
+      part.material.roughness = skin.metal > 0.5 ? 0.2 : 0.3;
+      part.material.emissive.set(color);
+      part.material.emissiveIntensity = skin.glow;
+    }
+  }
+
   // The on-screen Jump button (touchscreens) calls this.
   function setJumpButton(down) {
     if (down) pressJump();
@@ -457,7 +476,7 @@ export function createBobber(scene, camera, canvas) {
 
   return {
     mesh, position, velocity, flight, radius: r,
-    update, reset, setSpeedSetting, setControlsEnabled, setVisible, setJumpButton, getAim, boing, addRush,
+    update, reset, setSpeedSetting, setControlsEnabled, setVisible, setJumpButton, getAim, boing, addRush, setSkin,
     get rush() { return rush; },
     // Height above the water and whether it's floating (handy for other files).
     get height() { return flight.height; },

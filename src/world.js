@@ -50,6 +50,17 @@ export function isOverLake(z, margin = 0) {
   return level.lakes.some((lake) => z <= lake.start - margin && z >= lake.end + margin);
 }
 
+// Lanes: a spot across the lake. lane −1 = left shore, 0 = the middle, 1 = right shore.
+// Using lanes instead of X means things follow the lake as it curves.
+export function laneToX(lane, z) {
+  const e = getLakeEdges(z);
+  return (e.minX + e.maxX) / 2 + lane * (e.maxX - e.minX) / 2;
+}
+export function xToLane(x, z) {
+  const e = getLakeEdges(z);
+  return (x - (e.minX + e.maxX) / 2) / ((e.maxX - e.minX) / 2);
+}
+
 // The big leap across the gap after a lake: where it takes off and where it lands
 // (a little way into the next lake). null if there's no lake after this one.
 export function getLeapAfter(lake) {

@@ -18,24 +18,15 @@ export function createCourse(scene) {
   let rings = [];
 
   // Builds a fresh set of rings for the current level, in new random spots.
-  function reset() {
+  // Builds the ring gates for the current level at the given spots ([{ x, z }], chosen
+  // by the course plan in setpieces.js).
+  function reset(spots) {
     for (const r of rings) {
       scene.remove(r.group);
       r.group.traverse((o) => o.material && o.material.dispose()); // free their memory
     }
     rings = [];
-    const level = getLevel();
-    // Lake by lake, a ring every RINGS.spacing or so (never near a lake's ends, never over
-    // a gap, and not right at the start or the portal).
-    const spots = [];
-    for (const lake of level.lakes) {
-      const from = Math.min(lake.start - 15, -40);
-      const to = Math.max(lake.end + 12, level.finishZ + 30);
-      for (let z = from; z > to; z -= RINGS.spacing * THREE.MathUtils.randFloat(0.8, 1.2)) spots.push(z);
-    }
-    for (const z of spots) {
-      const edges = getLakeEdges(z);
-      const x = THREE.MathUtils.randFloat(edges.minX + 8, edges.maxX - 8);
+    for (const { x, z } of spots) {
       // The ring's bottom just touches the water, so a floating bobber goes through
       // its lower half.
       const height = RINGS.radius - 0.4;
@@ -112,11 +103,6 @@ export function createCourse(scene) {
     return { x: lakeCenterX(rz), z: rz };
   }
 
-  // Ring spots (so obstacles can stay away from them) and how many there are.
-  function getRingSpots() {
-    return rings.map((r) => ({ x: r.x, z: r.z }));
-  }
-
   // For the progress bar: how far along each ring is (0 = start, 1 = portal), and
   // whether you've been through it.
   function progressTicks() {
@@ -129,7 +115,6 @@ export function createCourse(scene) {
     update,
     reachedPortal,
     respawnPoint,
-    getRingSpots,
     progressTicks,
     get total() {
       return rings.length;

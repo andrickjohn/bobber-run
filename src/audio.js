@@ -42,6 +42,11 @@ window.addEventListener('keydown', unlock);
 window.addEventListener('touchend', unlock);
 window.addEventListener('click', unlock);
 
+// For music.js: the audio context, main volume knob and noise, once sound has started.
+export function getAudioParts() {
+  return ctx && ctx.state === 'running' ? { ctx, master, noise } : null;
+}
+
 // Mute / unmute everything (the lake sounds keep running silently underneath).
 export function setMuted(value) {
   muted = value;
@@ -652,37 +657,6 @@ export function playBlackHole(seconds) {
   // Gulp!
   tone(90, seconds, 0.5, 'sine', 0.4);
   tone(55, seconds + 0.08, 0.6, 'sine', 0.35);
-}
-
-// Caught a fish: a bubbly "blub-blip".
-export function playCatch() {
-  tone(400, 0, 0.1, 'sine', 0.12);
-  tone(800, 0.06, 0.14, 'sine', 0.12);
-}
-
-// Fish popped in the cooler: a bright sparkly chord. Each chain step goes higher.
-export function playCoolerPop(chain) {
-  const base = 523 * Math.pow(2, Math.min(chain - 1, 4) / 4);
-  [1, 1.25, 1.5, 2].forEach((m, i) => tone(base * m, i * 0.04, 0.3, 'triangle', 0.12));
-}
-
-// The cooler overflowed: a clattering crash as it dumps out.
-export function playOverflow() {
-  if (!ctx || ctx.state !== 'running' || !noise) return;
-  const t = ctx.currentTime;
-  const src = ctx.createBufferSource();
-  src.buffer = noise;
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(2500, t);
-  filter.frequency.exponentialRampToValueAtTime(200, t + 0.6);
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.3 * AUDIO.effectsVolume + 0.0001, t);
-  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
-  src.connect(filter).connect(gain).connect(master);
-  src.start(t, 0, 0.8);
-  tone(160, 0, 0.4, 'square', 0.08);
-  tone(110, 0.12, 0.5, 'square', 0.08);
 }
 
 // 3-2-1-GO! beeps: three short "boops", then a higher, longer "GO!" (like a race start).

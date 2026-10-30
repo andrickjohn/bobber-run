@@ -74,12 +74,13 @@ export const RUNNER = {
   rushMax: 0.45,       // ...up to this much extra (0.45 = 45% faster)
   rushDecay: 0.25,     // and the rush fades by this much per second
   rushFov: 14,         // the view widens this many degrees at full rush (feels faster)
+  coinKick: 1.2,       // each coin gives the view a tiny extra widening "kick" (degrees)
 };
 
 // Jumping: a quick hop to clear a log or a fish, then right back down to scoop coins.
 export const JUMP = {
-  speed: 12,           // how fast it pops up (units per second). Peak height = speed² ÷ (2 × gravity)
-  gravity: 30,         // how fast it comes back down (12 and 30 → about 2.4 high, 0.8 s in the air)
+  speed: 13,           // how fast it pops up (units per second). Peak height = speed² ÷ (2 × gravity)
+  gravity: 28,         // how fast it comes back down (13 and 28 → about 3 high, 0.9 s in the air)
   buffer: 0.15,        // pressing jump this many seconds before landing still counts
   landSplashSpeed: 5,  // landing faster than this makes a splash
 };
@@ -111,26 +112,10 @@ export const COURSE = {
 // Ring gates: optional glowing hoops along the course. Float through one for
 // points, a combo boost and a free zap.
 export const RINGS = {
-  spacing: 55,         // about this far apart along the course
   radius: 3.4,         // size of the hoop (the hole you go through)
   points: 50,          // points for going through (times your combo multiplier)
   comboBoost: 3,       // counts as this many coins for your combo
   zaps: 1,             // free zaps for going through
-};
-
-// Catch & stack: colorful fish you catch drop into the cooler on the side of the screen
-// (a small grid). Three of the same color in a row (up/down or across) pop, and fish
-// falling into the gaps can make more pops: a chain! Fill it with nothing to pop and it
-// overflows: you lose your combo.
-export const CATCH = {
-  colors: ['#ff5a5f', '#4dabf7', '#69db7c', '#ffd43b'], // red, blue, green, yellow
-  coolerColumns: 3,    // the cooler is 3 fish wide...
-  coolerRows: 5,       // ...and 5 fish tall
-  popComboBoost: 2,    // a pop also adds this much to your combo
-  schoolSpacing: 60,   // a little school of catchable fish about this often along the course
-  schoolSize: 3,       // fish in each school
-  sameColorChance: 0.5, // chance a fish matches the one before it in its school
-  catchRadius: 2.2,    // how close you have to bump a fish to catch it
 };
 
 // The combo: grab coins one after another without getting hit or waiting too long.
@@ -158,6 +143,37 @@ export const STARS = {
 export const TIPS = {
   seconds: 5,        // how long each tip stays on screen
   jumpLookAhead: 22, // show the "jump over it" tip when an obstacle is this close ahead
+};
+
+// The ghost: a see-through replay of your best run on each world (see ghost.js)
+export const GHOST = {
+  interval: 0.1,       // write down the bobber's position this often (seconds)
+  color: 0x8fe9ff,     // a pale glowing blue
+  opacity: 0.35,
+};
+
+// Bobber skins, unlocked by earning stars (3 per world, 12 in all).
+//   top / bottom – the colors of the two halves
+//   metal        – 0 = plastic, 1 = shiny metal
+//   glow         – how much it glows by itself (0 = none)
+export const SKINS = [
+  { id: 'classic', name: 'Classic', stars: 0, top: 0xe53935, bottom: 0xffffff, metal: 0, glow: 0 },
+  { id: 'ocean', name: 'Ocean', stars: 2, top: 0x1e88e5, bottom: 0xe3f2fd, metal: 0, glow: 0 },
+  { id: 'lime', name: 'Lime', stars: 4, top: 0x7cb342, bottom: 0x263238, metal: 0, glow: 0 },
+  { id: 'gold', name: 'Gold', stars: 6, top: 0xffc107, bottom: 0xfff3c4, metal: 0.5, glow: 0.18 },
+  { id: 'neon', name: 'Neon', stars: 9, top: 0xff4fd8, bottom: 0x4dfcff, metal: 0, glow: 0.6 },
+  { id: 'galaxy', name: 'Galaxy', stars: 12, top: 0x5b2bb5, bottom: 0xff7a8a, metal: 0.25, glow: 0.35 },
+];
+
+// Set-pieces: the designed patterns each course is built from (see setpieces.js).
+export const SETPIECES = {
+  firstZ: 22,          // the first set-piece starts this far from the dock
+  endMargin: 16,       // the last one ends this far before the portal
+  hopHeight: 2.6,      // how high the coin arc over a log goes (a jump reaches about 3)
+  hopHalfLength: 7.5,  // how far before (and after) the log the coin arc starts rising
+  fillerChance: 0.9,   // chance of an extra roaming obstacle between set-pieces (times the slider)
+  hazardChance: 0.35,  // chance (per difficulty level) an easy set-piece comes with a roaming hazard
+  ringChance: 0.4,     // chance of a ring gate (with a few coins leading in) between set-pieces
 };
 
 // The swirling portal at the end of every level
@@ -370,6 +386,7 @@ export const THEMES = {
 
 export const OBSTACLES = {
   count: 15,             // the "Number of Obstacles" slider (5–40)
+  defaultCount: 15,      // (the slider's starting value: more than this = extra obstacles)
   speedMultiplier: 1,    // all obstacles move this many times faster (difficulty changes it)
   includeWhirlpools: false, // whirlpools only appear on Hard (set by DIFFICULTY below)
   startSafeZone: 30,     // no obstacles closer than this to the start line
@@ -428,18 +445,12 @@ export const WILDLIFE = {
 };
 
 export const COINS = {
-  // Coins come in trails that run straight down the course, in "lanes": straight lines,
-  // smooth lane changes, gentle curves, and hops up into the sky lane. Line up and
-  // zoom through the whole trail!
-  aheadDistance: 130,  // trails are laid out this far ahead of the bobber
-  gapMin: 14,          // empty water between one trail and the next (difficulty changes these)
+  // Coins come in trails (where they go is decided by the set-pieces, see SETPIECES).
+  gapMin: 14,          // a breather of empty water between set-pieces (difficulty changes these)
   gapMax: 26,
   spacing: 3.2,        // distance between coins in a trail
-  trailMin: 9,         // coins in a trail
-  trailMax: 15,
   pickupRadius: 1.0,   // coin size for touching
   magnetRadius: 2.8,   // coins this close fly to you by themselves (so lined up = you get them)
-  ringTrailChance: 0.7, // chance a trail that reaches a ring gate lines up through it
   hoverHeight: 0.9,    // how high above the water coins float
   goldenChance: 1 / 6, // chance a trail ends with a Golden Lure
   zapPackChance: 1 / 5, // chance a Zap Pack floats between two trails
@@ -454,7 +465,6 @@ export const SCORING = {
   perLifeLeft: 100,
   zap: 25,               // zapping an obstacle
   perfectTrail: 100,     // collecting EVERY coin in a trail (times your combo multiplier)
-  coolerPop: 30,         // each fish popped in the cooler (times the chain and your combo)
   // (Ring gates are worth RINGS.points, times your combo multiplier.)
   difficulty: 'normal',  // 'easy', 'normal' or 'hard' (default; the settings screen changes it)
   multiplier: { easy: 1, normal: 1.5, hard: 2 },
@@ -523,6 +533,7 @@ export const EFFECTS = {
   wakeInterval: 0.045, // seconds between foam puffs
   wakeLife: 1.3,       // how long each puff lasts
   wakeSpread: 1.4,     // how fast the two sides of the wake spread apart (the "V")
+  sprayMinSide: 6,     // sliding sideways faster than this flings spray off the outside of the turn
   shakeTime: 0.35,     // camera shake when you get hit (seconds)
   shakeAmount: 0.5,    // how far the camera jolts
 };
@@ -530,6 +541,42 @@ export const EFFECTS = {
 export const AUDIO = {
   lakeVolume: 0.5,     // background lake sounds: lapping water, drips, birds, frogs (0 = off)
   effectsVolume: 1.0,  // multiplier for chimes and other effects
+  musicVolume: 0.35,   // background music (0 = off)
+};
+
+// The background music for each world (see music.js).
+//   tempo   – beats per minute (higher = faster)
+//   root    – the key's home note, as a MIDI note number (60 = middle C)
+//   scale   – which notes of the key are used (steps above the root)
+//   chords  – one chord per bar, as scale steps (0 = built on the root)
+//   kick / snare / hats / bass – which of the 16 steps in a bar they play on
+//   ...Wave – the sound of each instrument: 'sine' (soft), 'triangle' (mellow),
+//             'square' (retro game), 'sawtooth' (buzzy)
+const MAJOR = [0, 2, 4, 5, 7, 9, 11];
+const MINOR = [0, 2, 3, 5, 7, 8, 10];
+export const MUSIC = {
+  themes: {
+    lake: {   // sunny and bouncy, in C major
+      tempo: 112, root: 60, scale: MAJOR, chords: [0, 5, 3, 4],
+      kick: [0, 6, 8], snare: [4, 12], hats: [2, 6, 10, 14], bass: [0, 3, 6, 8, 11, 14],
+      padWave: 'triangle', bassWave: 'triangle', leadWave: 'square',
+    },
+    space: {  // dreamy and floaty, in A minor
+      tempo: 100, root: 57, scale: MINOR, chords: [0, 5, 2, 6],
+      kick: [0, 10], snare: [8], hats: [0, 4, 8, 12], bass: [0, 7, 10],
+      padWave: 'sawtooth', bassWave: 'sine', leadWave: 'sine',
+    },
+    lava: {   // fast and driving, in D (with a spooky lowered 2nd note)
+      tempo: 128, root: 50, scale: [0, 1, 3, 5, 7, 8, 10], chords: [0, 0, 5, 6],
+      kick: [0, 4, 8, 12], snare: [4, 12], hats: [2, 6, 10, 14], bass: [0, 2, 4, 6, 8, 10, 12, 14],
+      padWave: 'sawtooth', bassWave: 'sawtooth', leadWave: 'square',
+    },
+    ice: {    // slow and sparkly, in E (minor with a bright 6th)
+      tempo: 92, root: 52, scale: [0, 2, 3, 5, 7, 9, 10], chords: [0, 3, 5, 4],
+      kick: [0, 10], snare: [8], hats: [2, 6, 10, 14], bass: [0, 10],
+      padWave: 'triangle', bassWave: 'sine', leadWave: 'triangle',
+    },
+  },
 };
 
 export const CAMERA = {
@@ -538,6 +585,7 @@ export const CAMERA = {
   lookAhead: 22,       // the camera looks at a point this far in front of the bobber
   followSpeed: 6,      // higher = camera catches up faster (it never snaps)
   leapFollowSpeed: 18, // ...and while leaping across a gap (the bobber is going fast)
+  turnTilt: 0.006,     // how much the camera leans into turns (per unit of sideways speed)
   sideFollow: 0.35,    // how much the camera slides left/right with the bobber (0–1).
                        // Less than 1 means a still cursor points at a fixed spot on the
                        // water, so the bobber goes there and stops (instead of drifting forever).
@@ -546,6 +594,7 @@ export const CAMERA = {
 // The cartoon look (see style.js)
 export const STYLE = {
   toon: false,             // true = flat cartoon shading bands; false = smooth, modern shading
+  outlines: false,         // true = dark cartoon outlines around things
   outlineColor: 0x1b1b2f,  // dark navy outlines (softer than pure black)
   outlineThickness: 0.035, // outlines are this much bigger than the shape (3.5%: a thin edge)
 };
@@ -594,7 +643,8 @@ export const COLORS = {
   finishWhite: 0xffffff,
   bassBelly: 0xd8e6a0,
   pikeFin: 0x8a6d3b,
-  turtleShell: 0x3e5e2e,
+  bassFin: 0x8a8f5a,
+  turtleShell: 0x4a5a32,
   turtleSkin: 0x7a8c45,
   lureMetal: 0xffd54f,
   hookMetal: 0xc0c0c0,

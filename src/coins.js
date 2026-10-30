@@ -1,20 +1,14 @@
 // coins.js
-// Gold coins laid out in TRAILS ahead of the player. Trails run straight down the course
-// in "lanes" (a lane = a spot across the lake, like "a third of the way from the left"),
-// so they follow the lake's curves and you can line up and zoom through a whole trail:
-// straight lines, smooth lane changes and gentle curves.
-// Over a gap between lakes, the coins follow the arc of the big leap across.
-// Some trails line up through a ring gate. Grab EVERY coin in a trail for a bonus!
+// Gold coins, Golden Lures and ⚡ Zap Packs on the course. Where they go is decided by
+// the course plan (setpieces.js): coins come in trails you can line up with and zoom
+// through. Grab EVERY coin in a trail for a bonus!
 // Coins close to you fly to you by themselves (a "magnet"), so lined up = you get them.
-// Some trails end with a Golden Lure, and ⚡ Zap Packs float in the gaps between trails.
 // This file only reports pickups; game.js adds the points.
 
 import * as THREE from 'three';
 import { COINS, COLORS } from './config.js';
-import { getWaveHeight, getLakeEdges, getLevel, getLeapHeight } from './world.js';
+import { getWaveHeight } from './world.js';
 import { cartoon } from './style.js';
-
-const rand = THREE.MathUtils.randFloat;
 
 // Shapes are shared by every coin.
 const coinGeo = new THREE.CylinderGeometry(0.9, 0.9, 0.18, 20);
@@ -70,53 +64,11 @@ function makeZapPackModel() {
   return { group, materials: [mat, ringMat] };
 }
 
-// Smoothstep: goes from 0 to 1 smoothly (slow, fast, slow) as t goes from a to b.
-function smooth(a, b, t) {
-  const x = THREE.MathUtils.clamp((t - a) / (b - a), 0, 1);
-  return x * x * (3 - 2 * x);
-}
-
-// The spot across the lake for a lane at Z = z. lane: -1 = left shore, 0 = middle, 1 = right.
-function laneToX(lane, z) {
-  const e = getLakeEdges(z);
-  return (e.minX + e.maxX) / 2 + lane * (e.maxX - e.minX) / 2;
-}
-function xToLane(x, z) {
-  const e = getLakeEdges(z);
-  return (x - (e.minX + e.maxX) / 2) / ((e.maxX - e.minX) / 2);
-}
-
-// The trail shapes. Each takes t (0 at the start of the trail, 1 at the end) plus the
-// trail's starting lane and a second lane, and returns the lane at that point.
-const SHAPES = {
-  // Straight down one lane
-  line: (t, a) => a,
-  // A smooth lane change from lane a to lane b
-  shift: (t, a, b) => a + (b - a) * smooth(0.2, 0.8, t),
-  // A gentle S-curve around lane a
-  curve: (t, a) => a + Math.sin(t * Math.PI * 2) * 0.25,
-};
-// How often each shape is picked (bigger = more often)
-const SHAPE_WEIGHTS = { line: 3, shift: 3, curve: 2 };
-
-function pickShape() {
-  const total = Object.values(SHAPE_WEIGHTS).reduce((a, b) => a + b, 0);
-  let roll = Math.random() * total;
-  for (const [name, weight] of Object.entries(SHAPE_WEIGHTS)) {
-    roll -= weight;
-    if (roll <= 0) return name;
-  }
-  return 'line';
-}
-
 export function createCoins(scene) {
   const coins = [];
-  let nextTrailZ = -18; // where the next trail starts (trails are laid out ahead of you)
 
   // One shared material for all plain coins (there are a lot of them).
   const coinMaterial = makeCoinMaterial(COLORS.coin);
-
-  let ringSpots = []; // the ring gates on this level (some trails line up through them)
 
   function addPickup(kind, x, z, airHeight, trail = null) {
     const model =
@@ -132,36 +84,16 @@ export function createCoins(scene) {
     });
   }
 
-  // Lays out one trail starting at Z = startZ. Returns the Z where it ends.
-  function layTrail(startZ, isClear) {
-    const n = THREE.MathUtils.randInt(COINS.trailMin, COINS.trailMax);
-    const endZ = startZ - (n - 1) * COINS.spacing;
-    let shapeName = pickShape();
-    let laneA = rand(-0.6, 0.6);
-    // The other lane for lane changes: at least a third of the lake away.
-    let laneB = laneA > 0 ? rand(-0.6, laneA - 0.35) : rand(laneA + 0.35, 0.6);
-
-    // Is there a ring gate along this stretch? Then often line the trail up through it.
-    const ring = ringSpots.find((r) => r.z < startZ - 4 && r.z > endZ + 4);
-    if (ring && Math.random() < COINS.ringTrailChance) {
-      shapeName = 'line';
-      laneA = xToLane(ring.x, ring.z);
+  // Puts out the coins from the course plan. trails = lists of { x, z, height, golden };
+  // pickups = extra things like Zap Packs: { kind, x, z, height }.
+  function lay(trails, pickups) {
+    clear();
+    for (const coinsInTrail of trails) {
+      // Every coin in a trail shares this, to find out if you got them ALL.
+      const trail = { total: 0, got: 0, missed: false };
+      for (const c of coinsInTrail) addPickup(c.golden ? 'golden' : 'coin', c.x, c.z, c.height, trail);
     }
-    const shape = SHAPES[shapeName];
-    const goldenEnd = Math.random() < COINS.goldenChance;
-    // Every coin in this trail shares this, to find out if you got them ALL.
-    const trail = { total: 0, got: 0, missed: false };
-    for (let i = 0; i < n; i++) {
-      const z = startZ - i * COINS.spacing;
-      const lane = shape(i / (n - 1), laneA, laneB);
-      const x = laneToX(THREE.MathUtils.clamp(lane, -0.8, 0.8), z);
-      // Over a gap between lakes, coins float along the arc of the big leap.
-      const height = getLeapHeight(z);
-      // Skip coins that would sit inside an obstacle on the water.
-      if (height < 2 && !isClear(x, z, 2)) continue;
-      addPickup(goldenEnd && i === n - 1 ? 'golden' : 'coin', x, z, height, trail);
-    }
-    return endZ;
+    for (const p of pickups) addPickup(p.kind, p.x, p.z, p.height);
   }
 
   function remove(index) {
@@ -172,21 +104,8 @@ export function createCoins(scene) {
   }
 
   // Called every frame. Returns a list of the pickups grabbed this frame.
-  // canCollect = false while the bobber is respawning or the game is over.
-  function update(dt, time, bobber, isClear, canSpawn, canCollect) {
-    // Keep trails laid out ahead of the bobber, up to just before the portal.
-    const finishZ = getLevel().finishZ;
-    while (canSpawn && nextTrailZ > bobber.position.z - COINS.aheadDistance && nextTrailZ > finishZ + 15) {
-      const endZ = layTrail(nextTrailZ, isClear);
-      const gap = rand(COINS.gapMin, COINS.gapMax);
-      // Sometimes a Zap Pack floats in the gap before the next trail.
-      if (Math.random() < COINS.zapPackChance) {
-        const pz = endZ - gap / 2;
-        addPickup('zapPack', laneToX(rand(-0.6, 0.6), pz), pz, getLeapHeight(pz));
-      }
-      nextTrailZ = endZ - gap;
-    }
-
+  // canCollect = false on menus, while respawning or once the game is over.
+  function update(dt, time, bobber, canCollect) {
     const picked = [];
     const b = bobber.mesh.position;
     for (let i = coins.length - 1; i >= 0; i--) {
@@ -212,7 +131,7 @@ export function createCoins(scene) {
         let perfect = false;
         if (c.trail) {
           c.trail.got++;
-          perfect = c.trail.got === c.trail.total && !c.trail.missed && c.trail.total >= COINS.trailMin - 2;
+          perfect = c.trail.got === c.trail.total && !c.trail.missed && c.trail.total >= 6;
         }
         picked.push({ kind: c.kind, golden: c.golden, x: p.x, y: p.y, z: p.z, perfect });
         remove(i);
@@ -226,13 +145,7 @@ export function createCoins(scene) {
 
   function clear() {
     while (coins.length) remove(coins.length - 1);
-    nextTrailZ = -18;
   }
 
-  // The ring gates on this level, so some trails can line up through them.
-  function setRingSpots(spots) {
-    ringSpots = spots;
-  }
-
-  return { update, clear, setRingSpots, get list() { return coins; } };
+  return { lay, update, clear, get list() { return coins; } };
 }

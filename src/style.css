@@ -114,7 +114,7 @@ body.warping .hud-layer { visibility: hidden; }
 .progress-tick { position: absolute; top: -3px; width: 2px; height: 10px; margin-left: -1px; border-radius: 1px; background: rgba(255, 255, 255, 0.55); }
 .progress-tick.passed { background: var(--green); }
 
-/* Right: lives, zaps, cooler */
+/* Right: lives and zaps */
 .hud-right { top: 64px; right: 14px; padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 9px; }
 .lives { display: flex; gap: 6px; }
 .life { width: 16px; height: 16px; border-radius: 50%; background: linear-gradient(#ff4b4b 50%, #fff 50%); box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.3); }
@@ -123,9 +123,6 @@ body.warping .hud-layer { visibility: hidden; }
 .ammo-label { width: 100%; text-align: center; font-size: 10px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); margin-bottom: 1px; }
 .zap-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 6px rgba(95, 227, 240, 0.8); }
 .zap-dot.empty { background: var(--faint); box-shadow: none; }
-.cooler { text-align: center; }
-.cooler-label { font-size: 10px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
-#cooler-canvas { width: 100px; height: 168px; display: block; }
 
 /* Buttons (top-right, and sound in the bottom-left) and the little notes ("toasts") */
 .top-buttons { position: absolute; top: 14px; right: 14px; display: flex; gap: 8px; pointer-events: auto; }
@@ -220,6 +217,9 @@ body.title-mode .combo-glow, body.warping .combo-glow { display: none; }
 }
 .flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity 0.6s; z-index: 10; }
 .flash.on { opacity: 1; }
+/* Speed lines (drawn by ui.js) */
+.speed-lines { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 1; }
+body.title-mode .speed-lines, body.warping .speed-lines { display: none; }
 /* A soft dark vignette around the edges: focuses the eye on the middle (cinematic) */
 .vignette {
   position: fixed; inset: 0; pointer-events: none; z-index: 0;
@@ -341,6 +341,19 @@ body.title-mode .combo-glow, body.warping .combo-glow { display: none; }
 .world-name { font-size: 14px; font-weight: 700; line-height: 1.15; }
 .world-stars { font-size: 12px; letter-spacing: 1px; color: var(--accent); }
 .world-stars i { font-style: normal; color: var(--faint); }
+.menu .daily-button {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;
+  margin-top: 8px; padding: 11px 14px; font-size: 13px; font-weight: 500; text-align: left; color: var(--muted);
+}
+.daily-button b { color: var(--text); font-weight: 700; }
+.daily-best { flex: none; font-weight: 700; color: var(--cyan); font-variant-numeric: tabular-nums; }
+.label-note { text-transform: none; letter-spacing: 0; font-weight: 600; }
+.skins { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.menu .skin { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px 4px; border-radius: 12px; min-width: 0; }
+.menu .skin.selected { border-color: var(--accent); background: rgba(255, 179, 33, 0.14); }
+.menu .skin.locked { opacity: 0.45; cursor: default; }
+.skin-ball { width: 22px; height: 22px; border-radius: 50%; box-shadow: inset 0 -3px 6px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.25); }
+.skin-name { font-size: 11px; font-weight: 600; white-space: nowrap; }
 .title-footer { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.08); }
 .spacer { flex: 1; }
 .menu .small-button { font-size: 13px; padding: 7px 14px; border-radius: 10px; }
@@ -394,7 +407,6 @@ body.title-mode .touch-controls, body.warping .touch-controls { display: none; }
   .life { width: 12px; height: 12px; }
   .zap-dot { width: 6px; height: 6px; }
   .ammo { max-width: 80px; }
-  #cooler-canvas { width: 76px; height: 128px; }
   .toast { top: auto; bottom: 64px; font-size: 13px; white-space: normal; text-align: center; max-width: 80vw; }
   body.touch .toast { bottom: auto; top: 96px; }
   .big-pop { font-size: 28px; }
@@ -405,6 +417,7 @@ body.title-mode .touch-controls, body.warping .touch-controls { display: none; }
   .menu.title-menu { padding: 22px 16px 16px; }
   .big-title { font-size: 44px !important; }
   .world-cards { grid-template-columns: repeat(2, 1fr); }
+  .skins { grid-template-columns: repeat(3, 1fr); }
   .bests { display: none; }
 }
 
@@ -427,6 +440,7 @@ body.title-mode .touch-controls, body.warping .touch-controls { display: none; }
 @media (max-height: 500px) {
   .menu.title-menu { width: min(640px, calc(100vw - 32px)); }
   .menu.title-menu .howto, .menu.title-menu .note { display: none; }
+  .menu .daily-button { padding: 7px 12px; }
   .world-cards { grid-template-columns: repeat(4, 1fr); }
   .hud-left { top: 6px; left: 6px; padding: 5px 10px 6px; }
   .brand { display: none; }
@@ -434,7 +448,6 @@ body.title-mode .touch-controls, body.warping .touch-controls { display: none; }
   .hud-top { top: 6px; padding: 5px 12px 7px; min-width: 220px; }
   .hud-top-row { font-size: 12px; }
   .hud-right { top: 48px; padding: 6px; gap: 5px; }
-  #cooler-canvas { width: 70px; height: 112px; }
   .touch-btn { width: 66px; height: 66px; }
   .jump-btn { width: 76px; height: 76px; }
   body.touch .touch-controls { bottom: calc(12px + env(safe-area-inset-bottom)); }

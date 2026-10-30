@@ -58,6 +58,7 @@ export function toonMaterial(params) {
 // thickness = how much bigger the outline copy is (0.08 = 8% bigger).
 // The outline copy is attached INSIDE each mesh, so it moves, turns and stretches with it.
 export function outline(object, thickness = STYLE.outlineThickness) {
+  if (!STYLE.outlines) return object;
   const meshes = [];
   object.traverse((o) => {
     if (o.isMesh && !o.userData.isOutline && !o.userData.noOutline) meshes.push(o);
